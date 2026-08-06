@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tokens de docs/11-design-system.md sección 1 — paridad de contraste
+   verificada en ambos modos, no inversión simple de colores. */
+:root {
+  --surface: #ffffff;
+  --surface-alt: #f8fafc;
+  --text-primary: #111827;
+  --text-secondary: #5c6862;
+  --border: #e5e7eb;
+  --primary-marca: #0f5132;
+}
+
+/* El login es la fachada de marca institucional — mantiene su apariencia
+   fija (glass claro sobre verde) sin importar el tema del sistema/app,
+   igual que el build estático original nunca tuvo modo oscuro. Redeclara
+   los tokens a sus valores claros dentro de este scope, ganándole a
+   `.dark` aunque el usuario tenga el tema oscuro activo globalmente. */
+.tema-fijo-claro {
+  --surface: #ffffff;
+  --surface-alt: #f8fafc;
+  --text-primary: #111827;
+  --text-secondary: #5c6862;
+  --border: #e5e7eb;
+}
+
+.dark {
+  --surface: #0f1720;
+  --surface-alt: #161f2b;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --border: #263042;
+  --primary-marca: #3fae73;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-surface-alt text-ink font-body antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Fondo ambiental (blobs) — ver docs original del login, portado 1:1.
+   Loops infinitos en CSS puro: más barato que animarlos vía JS. */
+@keyframes float-a {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(40px, 30px) scale(1.08);
+  }
+}
+@keyframes float-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-30px, -40px) scale(1.06);
+  }
+}
+@keyframes float-c {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-25px, 25px) scale(1.1);
+  }
+}
+.animate-float-a {
+  animation: float-a 22s ease-in-out infinite;
+}
+.animate-float-b {
+  animation: float-b 26s ease-in-out infinite;
+}
+.animate-float-c {
+  animation: float-c 30s ease-in-out infinite;
+}
+
+@keyframes ripple-anim {
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+.animate-ripple {
+  animation: ripple-anim 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}

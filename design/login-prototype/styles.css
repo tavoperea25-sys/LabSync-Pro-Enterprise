@@ -1,0 +1,727 @@
+/* =============================================
+   styles.css — Login Plataforma HVE
+   Gobernación del Cesar — Laboratorio de Salud Pública
+   ============================================= */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* ---- Color: escala de marca (verde institucional) ---- */
+  --color-primary:      #0F5132;
+  --color-primary-mid:  #1B7A4A;
+  --color-primary-light:#8FD9AE;
+  --color-primary-tint: #EAF7EF;
+  --color-primary-tint-2:#F6FBF8;
+
+  --white:      #FFFFFF;
+  --ink:        #10201A;
+  --ink-soft:   #37453D;
+  --gray:       #5C6862;
+  --gray-soft:  #8B978F;
+  --border:     #DCEAE1;
+
+  --danger:      #DC2626;
+  --danger-tint: #FDEDED;
+
+  --shadow-ambient: 0 40px 100px rgba(15,81,50,.18), 0 10px 30px rgba(15,81,50,.10);
+  --shadow-soft:    0 2px 10px rgba(16,32,26,.06);
+  --shadow-btn:     0 4px 18px rgba(15,81,50,.30);
+  --shadow-btn-hover: 0 12px 30px rgba(15,81,50,.36);
+
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body:    'Inter', sans-serif;
+
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 40px;
+  --space-6: 56px;
+  --space-7: 64px;
+
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+
+  --ease-out: cubic-bezier(.16,1,.3,1);
+  --dur-fast: 150ms;
+  --dur-base: 220ms;
+}
+
+/* ---- BODY ---- */
+html, body {
+  min-height: 100vh;
+}
+body {
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: linear-gradient(160deg, #ffffff 0%, var(--color-primary-tint-2) 55%, var(--color-primary-tint) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3);
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* =============================================
+   FONDO AMBIENTAL
+   ============================================= */
+.bg-ambient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: .45;
+  will-change: transform;
+}
+.blob-1 {
+  width: 520px; height: 520px;
+  top: -140px; left: -120px;
+  background: radial-gradient(circle, var(--color-primary) 0%, transparent 70%);
+  animation: float-a 22s ease-in-out infinite;
+}
+.blob-2 {
+  width: 460px; height: 460px;
+  bottom: -160px; right: -100px;
+  background: radial-gradient(circle, var(--color-primary-light) 0%, transparent 70%);
+  opacity: .38;
+  animation: float-b 26s ease-in-out infinite;
+}
+.blob-3 {
+  width: 380px; height: 380px;
+  top: 40%; right: 8%;
+  background: radial-gradient(circle, var(--color-primary-mid) 0%, transparent 70%);
+  opacity: .28;
+  animation: float-c 30s ease-in-out infinite;
+}
+@keyframes float-a {
+  0%, 100% { transform: translate(0,0) scale(1); }
+  50%      { transform: translate(40px,30px) scale(1.08); }
+}
+@keyframes float-b {
+  0%, 100% { transform: translate(0,0) scale(1); }
+  50%      { transform: translate(-30px,-40px) scale(1.06); }
+}
+@keyframes float-c {
+  0%, 100% { transform: translate(0,0) scale(1); }
+  50%      { transform: translate(-25px,25px) scale(1.1); }
+}
+
+.molecules {
+  position: absolute;
+  right: -40px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 460px;
+  height: 100vh;
+  opacity: .5;
+}
+
+/* ---- Estado inicial de elementos animados por Motion ----
+   Se ocultan solo si JS está disponible (ver script.js), para
+   evitar contenido invisible cuando JS falla o está deshabilitado. */
+.js-ready .reveal {
+  opacity: 0;
+  transform: translateY(14px);
+}
+
+/* =============================================
+   CARD
+   ============================================= */
+.card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 1000px;
+  max-width: 100%;
+  min-height: 620px;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-ambient);
+  animation: rise .6s var(--ease-out) both;
+}
+@keyframes rise {
+  from { opacity:0; transform:translateY(20px) scale(.985); }
+  to   { opacity:1; transform:translateY(0) scale(1); }
+}
+
+/* =============================================
+   PANEL IZQUIERDO — visual institucional
+   ============================================= */
+.panel-left {
+  width: 340px;
+  flex-shrink: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-4) var(--space-5);
+  overflow: hidden;
+  background: linear-gradient(165deg, var(--color-primary) 0%, #0B3B24 100%);
+}
+.panel-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(143,217,174,.35) 0%, transparent 45%),
+    radial-gradient(circle at 90% 85%, rgba(27,122,74,.55) 0%, transparent 55%);
+  pointer-events: none;
+}
+
+/* Chip flotante tipo vidrio */
+.chip-float {
+  position: relative;
+  z-index: 2;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px 7px 10px;
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.22);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255,255,255,.92);
+  letter-spacing: .2px;
+}
+.chip-float svg { width: 14px; height: 14px; color: var(--color-primary-light); }
+
+.left-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.brand-block { text-align: center; }
+.logo-wrap {
+  width: 108px;
+  height: 108px;
+  margin: 0 auto var(--space-3);
+  border-radius: 50%;
+  background: rgba(255,255,255,.92);
+  border: 1.5px solid rgba(255,255,255,.3);
+  box-shadow: 0 10px 30px rgba(0,0,0,.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 6px;
+}
+.logo-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+}
+.lab-name {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 17px;
+  color: #fff;
+  line-height: 1.5;
+  max-width: 230px;
+  margin: 0 auto;
+}
+
+.value-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.value-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13.5px;
+  color: rgba(255,255,255,.86);
+  line-height: 1.5;
+}
+.value-list svg {
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  color: var(--color-primary-light);
+}
+
+/* =============================================
+   PANEL DERECHO — formulario (glass ligero)
+   ============================================= */
+.panel-right {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255,255,255,.78);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--space-7) var(--space-6) var(--space-5);
+}
+
+/* Cabecera */
+.form-header {
+  text-align: center;
+  margin-bottom: var(--space-4);
+}
+.shield-wrap {
+  width: 54px;
+  height: 54px;
+  margin: 0 auto var(--space-2);
+  background: var(--color-primary-tint);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.shield-wrap svg {
+  width: 27px;
+  height: 27px;
+  color: var(--color-primary);
+}
+.eyebrow {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--color-primary-mid);
+  margin-bottom: 8px;
+}
+.form-title {
+  font-family: var(--font-display);
+  font-size: 25px;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  color: var(--ink);
+  margin-bottom: 8px;
+  line-height: 1.25;
+}
+.form-sub {
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  color: var(--gray);
+  line-height: 1.5;
+}
+
+/* Divisor con flask */
+.divider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: var(--space-4);
+}
+.divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.flask-icon {
+  width: 36px;
+  height: 36px;
+  background: var(--color-primary-tint);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.flask-icon svg {
+  width: 17px;
+  height: 17px;
+  color: var(--color-primary);
+}
+
+/* ---- Campos ---- */
+.field {
+  margin-bottom: var(--space-3);
+}
+.field label {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  color: var(--ink-soft);
+  margin-bottom: 7px;
+}
+.inp-wrap {
+  position: relative;
+}
+.ico {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+.ico svg { width: 17px; height: 17px; }
+
+input, select {
+  width: 100%;
+  height: 50px;
+  padding: 0 42px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--ink);
+  background: #fff;
+  outline: none;
+  font-family: var(--font-body);
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color var(--dur-base) var(--ease-out),
+              box-shadow var(--dur-base) var(--ease-out),
+              transform var(--dur-fast) var(--ease-out);
+}
+input::placeholder { color: var(--gray-soft); }
+input:hover, select:hover { border-color: var(--color-primary-light); }
+input:focus, select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(15,81,50,.13);
+  transform: translateY(-1px);
+}
+input[aria-invalid="true"], select[aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 4px rgba(220,38,38,.12);
+}
+
+/* Botón ojo */
+.eye-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 38px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #8ea198;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: color var(--dur-fast), background var(--dur-fast);
+}
+.eye-btn:hover { color: var(--color-primary); background: var(--color-primary-tint); }
+.eye-btn svg { width: 18px; height: 18px; }
+
+/* Flecha select */
+.arr {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--gray);
+  display: flex;
+  transition: transform var(--dur-base) var(--ease-out);
+}
+select:focus ~ .arr { transform: translateY(-50%) rotate(180deg); color: var(--color-primary); }
+.arr svg { width: 18px; height: 18px; }
+
+/* Mensaje de error */
+.err-msg {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 6px;
+}
+.err-msg svg { width: 13px; height: 13px; flex-shrink: 0; }
+.err-msg:empty { display: none; }
+
+/* ---- Recordarme / Olvidé contraseña ---- */
+.form-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: var(--space-1) 0 var(--space-4);
+  flex-wrap: wrap;
+}
+.checkbox-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink-soft);
+  user-select: none;
+}
+.checkbox-wrap input {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.chk-box {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: 1.5px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--dur-fast), border-color var(--dur-fast), transform var(--dur-fast);
+}
+.chk-box svg {
+  width: 12px; height: 12px;
+  color: #fff;
+  opacity: 0;
+  transform: scale(.5);
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.checkbox-wrap input:checked ~ .chk-box {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.checkbox-wrap input:checked ~ .chk-box svg { opacity: 1; transform: scale(1); }
+.checkbox-wrap input:focus-visible ~ .chk-box {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.checkbox-wrap:hover .chk-box { border-color: var(--color-primary-mid); }
+
+.link-forgot {
+  font: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary-mid);
+  text-decoration: none;
+  padding: 6px 4px;
+  margin: -6px -4px;
+  border-radius: 6px;
+  transition: color var(--dur-fast);
+}
+.link-forgot:hover { color: var(--color-primary); text-decoration: underline; }
+.link-forgot:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.forgot-hint {
+  font-size: 12px;
+  color: var(--gray);
+  margin-top: -6px;
+  margin-bottom: var(--space-3);
+}
+.forgot-hint:empty { display: none; margin: 0; }
+
+/* ---- Botón principal ---- */
+.btn-login {
+  position: relative;
+  width: 100%;
+  height: 50px;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-mid));
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-shadow: var(--shadow-btn);
+  transition: box-shadow var(--dur-base), filter var(--dur-base);
+  will-change: transform;
+}
+.btn-login svg { width: 20px; height: 20px; }
+.btn-login:hover:not(:disabled) {
+  box-shadow: var(--shadow-btn-hover);
+  filter: brightness(1.05);
+}
+.btn-login:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 3px;
+}
+.btn-login:disabled { cursor: default; opacity: .92; }
+
+.btn-content, .btn-loading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.btn-login[data-loading="true"] .btn-content { display: none; }
+.btn-loading { display: none; }
+.btn-login[data-loading="true"] .btn-loading { display: inline-flex; }
+
+.spinner {
+  width: 18px; height: 18px;
+  border: 2.2px solid rgba(255,255,255,.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255,255,255,.5);
+  transform: scale(0);
+  pointer-events: none;
+  animation: ripple-anim .6s var(--ease-out);
+}
+@keyframes ripple-anim {
+  to { transform: scale(1); opacity: 0; }
+}
+
+.form-status {
+  margin-top: var(--space-2);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+.form-status:empty { display: none; }
+
+/* ---- Footer ---- */
+.footer-meta {
+  margin-top: var(--space-3);
+  text-align: center;
+}
+.secure-tag {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--gray);
+  margin-bottom: 6px;
+}
+.secure-tag svg {
+  width: 13px;
+  height: 13px;
+  color: var(--color-primary);
+}
+
+.copy-text {
+  font-size: 11px;
+  color: var(--gray-soft);
+  line-height: 1.65;
+}
+
+/* ---- Banner ---- */
+.warn-banner {
+  margin-top: var(--space-3);
+  background: var(--color-primary-tint);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.warn-ico {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  background: rgba(15,81,50,.12);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.warn-ico svg {
+  width: 16px;
+  height: 16px;
+  color: var(--color-primary);
+}
+.warn-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 3px;
+}
+.warn-body {
+  font-size: 11.5px;
+  color: #3c6b4c;
+  line-height: 1.55;
+}
+
+/* ---- Foco accesible global (solo teclado) ---- */
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1024px) {
+  .card { width: 900px; min-height: 600px; }
+  .panel-left { width: 300px; }
+  .panel-right { padding: var(--space-6) var(--space-5) var(--space-4); }
+}
+
+@media (max-width: 860px) {
+  body { padding: var(--space-2); }
+  .card { flex-direction: column; min-height: 0; }
+  .panel-left {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-3) var(--space-4);
+  }
+  .panel-glow { display: none; }
+  .chip-float { display: none; }
+  .left-content { flex-direction: row; align-items: center; gap: var(--space-3); }
+  .brand-block { display: flex; align-items: center; gap: var(--space-2); text-align: left; }
+  .logo-wrap { width: 56px; height: 56px; margin: 0; }
+  .lab-name { font-size: 14px; max-width: none; }
+  .value-list { display: none; }
+  .panel-right { padding: var(--space-5) var(--space-4); }
+}
+
+@media (max-width: 480px) {
+  .form-title { font-size: 21px; }
+  .panel-right { padding: var(--space-4) var(--space-3); }
+  .panel-left { padding: var(--space-3); }
+  .lab-name { display: none; }
+  .form-options { gap: var(--space-1); }
+}
+
+/* ---- Accesibilidad: respeta reduce-motion también a nivel CSS ---- */
+@media (prefers-reduced-motion: reduce) {
+  .card { animation: none; }
+  .js-ready .reveal { opacity: 1; transform: none; }
+  .blob { animation: none; }
+  input:focus, select:focus { transform: none; }
+}

@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: labsync
+          POSTGRES_PASSWORD: labsync
+          POSTGRES_DB: labsync_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U labsync"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Type-check (mypy)
+        run: mypy app
+      - name: Levantar MinIO real para tests de almacenamiento
+        # No se usa `services:` porque la imagen minio/minio no arranca el
+        # servidor sin un comando explícito (`server /data`), y `services:`
+        # de GitHub Actions no admite fijar un `command:` — solo `image`,
+        # `env`, `ports`, `volumes` y `options`. Puerto 9000 (no uno
+        # arbitrario) a propósito: `conftest.py` solo sobreescribe
+        # MINIO_ENDPOINT_INTERNO a "localhost:9000"; MINIO_ENDPOINT_PUBLICO
+        # se queda en su default de app/core/config.py, que también es
+        # "localhost:9000" — con cualquier otro puerto ambos clientes
+        # (interno/público) dejarían de coincidir y las operaciones
+        # server-to-server (p. ej. copiar documento) fallarían con
+        # NoSuchKey, aunque la subida haya funcionado.
+        run: |
+          docker run -d --name minio-ci -p 9000:9000 \
+            -e MINIO_ROOT_USER=labsync -e MINIO_ROOT_PASSWORD=labsync123 \
+            minio/minio:latest server /data
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
+              echo "MinIO listo tras ${i} intento(s)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "MinIO no respondió a tiempo" >&2
+          exit 1
+      - name: Tests (incluye gate de aislamiento multi-tenant)
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg2://labsync:labsync@localhost:5432/labsync_test
+        run: pytest --cov=app --cov-report=term-missing
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package.json
+      - run: npm install
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npm run typecheck
+      - name: Tests
+        run: npm test
+      - name: Build
+        run: npm run build

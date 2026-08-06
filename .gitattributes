@@ -1,0 +1,27 @@
+# =============================================================================
+# LabSync Pro Enterprise — .gitattributes
+# Normaliza finales de línea entre colaboradores en Windows/Mac/Linux y marca
+# explícitamente los binarios para que Git nunca intente diffearlos como texto.
+# =============================================================================
+
+# Por defecto, normaliza a LF en el repositorio, con detección automática de
+# archivos de texto — evita diffs ruidosos por CRLF/LF entre sistemas.
+* text=auto eol=lf
+
+# Scripts de Windows: deben conservar CRLF real para ejecutarse correctamente
+# en cmd.exe/PowerShell.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binarios explícitos — nunca se normalizan ni se diffean como texto.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

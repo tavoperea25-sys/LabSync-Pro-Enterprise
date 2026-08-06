@@ -1,0 +1,110 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      # Parametrizado (repositorio público) — ver .env.example en la raíz.
+      # El valor tras ":-" es el default de desarrollo, idéntico al que
+      # estaba hardcodeado antes: sin un .env real, el comportamiento local
+      # no cambia.
+      POSTGRES_USER: ${POSTGRES_USER:-labsync}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-labsync}
+      POSTGRES_DB: ${POSTGRES_DB:-labsync}
+    ports:
+      - "5432:5432"
+    volumes:
+      - labsync_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-labsync}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    environment:
+      # Parametrizado (repositorio público) — ver .env.example en la raíz.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-labsync}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-labsync123}
+      # Clave maestra local para cifrado en reposo (SSE-S3) de los buckets
+      # de documentos/evidencias — ver docs/16-seguridad.md sección 5. Modo
+      # de clave estática integrado de MinIO (sin KES/Vault externo); en un
+      # despliegue real esta clave vendría de un secret manager, no del
+      # propio compose (igual convención de dev-local que MINIO_ROOT_PASSWORD).
+      MINIO_KMS_SECRET_KEY: "${MINIO_KMS_SECRET_KEY:-labsync-master-key:w09R7021SABtUCVnFUVbShEhWfn2ONiWmFbD0ruskaw=}"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - labsync_minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+      - labsync_backend_keys:/app/.keys
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      # Sin curl en la imagen (python:3.12-slim) — urllib de la librería
+      # estándar evita añadir un paquete de sistema solo para esto.
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    build: ./backend
+    entrypoint: ["python", "-m", "app.worker.main"]
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      # El worker no expone HTTP — se verifica que el heartbeat que escribe
+      # tras cada ciclo (app/worker/main.py::_actualizar_heartbeat) sigue
+      # actualizándose. 600s = el doble del intervalo de barrido (300s), con
+      # margen para que un ciclo largo no dispare un falso positivo.
+      test: ["CMD", "python", "-c", "import time; assert time.time() - float(open('/tmp/worker_heartbeat').read()) < 600"]
+      interval: 60s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build: ./frontend
+    env_file:
+      - ./frontend/.env
+    environment:
+      VITE_API_PROXY_TARGET: http://backend:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  labsync_postgres_data:
+  labsync_backend_keys:
+  labsync_minio_data:
