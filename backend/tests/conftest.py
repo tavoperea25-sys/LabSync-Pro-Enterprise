@@ -43,13 +43,13 @@ from alembic.config import Config  # noqa: E402
 from app.core.database import SessionLocal, engine, set_tenant_context
 from app.core.rate_limit import limiter  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
+from app.main import _asegurar_buckets  # noqa: E402
 from app.modules.auth.infrastructure.models import (  # noqa: E402
     Laboratorio,
     Rol,
     Usuario,
     UsuarioRol,
 )
-from app.main import _asegurar_buckets  # noqa: E402
 from app.seeds.seed_roles_permisos import ejecutar as sembrar_roles_permisos  # noqa: E402
 
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
