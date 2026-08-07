@@ -1,15 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ResultadoBusqueda } from "../types";
 import { Omnibox } from "./Omnibox";
 
 const navegarMock = vi.fn();
-vi.mock("react-router-dom", async (importarOriginal) => {
-  const real = await importarOriginal<typeof import("react-router-dom")>();
+vi.mock("react-router", async (importarOriginal) => {
+  const real = await importarOriginal<typeof import("react-router")>();
   return { ...real, useNavigate: () => navegarMock };
 });
 

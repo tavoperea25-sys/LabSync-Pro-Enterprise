@@ -1,5 +1,5 @@
 import { Calendar } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 import { useEventos } from "@/features/calendario/hooks/useCalendario";
 import { Badge } from "@/shared/components/ui/badge";

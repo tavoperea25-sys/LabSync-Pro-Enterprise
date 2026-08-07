@@ -1,6 +1,6 @@
 import { AlertTriangle, Wrench } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { useEquipos } from "@/features/equipos/hooks/useEquipos";
 import { IncidenciasQrPendientes } from "@/features/qr/components/IncidenciasQrPendientes";

@@ -14,7 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router";
 
 import { ApiError } from "@/lib/httpClient";
 import { Button } from "@/shared/components/ui/button";
