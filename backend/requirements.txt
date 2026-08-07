@@ -6,7 +6,7 @@ alembic==1.14.0
 pydantic[email]==2.10.4
 pydantic-settings==2.7.0
 qrcode[pil]==8.0
-slowapi==0.1.9
+slowapi==0.1.10
 openpyxl==3.1.5
 fpdf2==2.8.2
 minio==7.2.13
