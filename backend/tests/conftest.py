@@ -43,6 +43,7 @@ from alembic.config import Config  # noqa: E402
 from app.core.database import SessionLocal, engine, set_tenant_context
 from app.core.rate_limit import limiter  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
+from app.main import _asegurar_buckets  # noqa: E402
 from app.modules.auth.infrastructure.models import (  # noqa: E402
     Laboratorio,
     Rol,
@@ -65,6 +66,20 @@ def _migrar_base_de_datos():
     yield
     command.downgrade(cfg, "base")
     engine.dispose()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _asegurar_buckets_minio():
+    """`_asegurar_buckets` (app/main.py) normalmente corre en el evento
+    `startup` de FastAPI — pero los fixtures `client` de los tests
+    instancian `TestClient(app)` directamente (sin `with ... as client`),
+    así que ese lifespan nunca se dispara y los buckets nunca se crean.
+    En un MinIO efímero recién levantado (como el de CI) eso revienta con
+    "NoSuchBucket" en el primer upload; en un MinIO local de larga vida los
+    buckets ya existen de una corrida anterior, así que el problema queda
+    enmascarado fuera de CI. Se llama a la misma función real que usa la
+    app (no se duplica la lista de buckets) una sola vez por sesión."""
+    _asegurar_buckets()
 
 
 @pytest.fixture(autouse=True)

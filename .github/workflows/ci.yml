@@ -51,6 +51,7 @@ jobs:
         run: |
           docker run -d --name minio-ci -p 9000:9000 \
             -e MINIO_ROOT_USER=labsync -e MINIO_ROOT_PASSWORD=labsync123 \
+            -e MINIO_KMS_SECRET_KEY="labsync-master-key:w09R7021SABtUCVnFUVbShEhWfn2ONiWmFbD0ruskaw=" \
             minio/minio:latest server /data
           for i in $(seq 1 30); do
             if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
@@ -63,7 +64,17 @@ jobs:
           exit 1
       - name: Tests (incluye gate de aislamiento multi-tenant)
         env:
-          TEST_DATABASE_URL: postgresql+psycopg2://labsync:labsync@localhost:5432/labsync_test
+          # OJO: debe ser `labsync_app` (rol restringido de runtime), NO
+          # `labsync` (rol de migraciones, dueño de las tablas). Postgres
+          # bypassa RLS —incluso con FORCE ROW LEVEL SECURITY— para el
+          # dueño de la tabla (ver alembic/versions/0001_esquema_inicial_auth.py).
+          # Conectar como `labsync` aquí deshabilita silenciosamente el gate
+          # de aislamiento multi-tenant para toda la suite: las políticas
+          # RLS dejan de filtrar, así que un tenant ve/escribe filas de
+          # otro, y eso además contamina el resto de tests con datos
+          # cruzados. TEST_DATABASE_URL_MIGRACIONES sí debe seguir usando
+          # `labsync` (no se define aquí — cae al default de conftest.py).
+          TEST_DATABASE_URL: postgresql+psycopg2://labsync_app:labsync_app@localhost:5432/labsync_test
         run: pytest --cov=app --cov-report=term-missing
 
   frontend:
