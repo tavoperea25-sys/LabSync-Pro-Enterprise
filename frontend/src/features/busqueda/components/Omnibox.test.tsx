@@ -148,7 +148,11 @@ describe("Omnibox", () => {
 
     await usuario.click(boton);
     const campo = await screen.findByRole("combobox", { name: "Buscar" });
-    expect(campo).toHaveFocus();
+    // El componente enfoca el campo en un requestAnimationFrame (Omnibox.tsx)
+    // para asegurar que el diálogo ya montó — puede quedar un tick después
+    // de que el nodo aparece en el DOM, así que hay que esperar el foco en
+    // vez de afirmarlo de forma síncrona (si no, es flaky bajo carga/CI).
+    await waitFor(() => expect(campo).toHaveFocus());
 
     await usuario.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
