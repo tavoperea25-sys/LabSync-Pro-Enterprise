@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
 import { lazy, Suspense, type ReactNode } from "react";
-import { Navigate, Route, BrowserRouter as Router, Routes } from "react-router-dom";
+import { Navigate, Route, BrowserRouter as Router, Routes } from "react-router";
 
 import { AuthProvider } from "@/features/auth/hooks/AuthProvider";
 import { ThemeProvider } from "@/shared/hooks/ThemeProvider";

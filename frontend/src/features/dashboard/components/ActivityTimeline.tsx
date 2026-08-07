@@ -1,5 +1,5 @@
 import { History } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 import { EmptyState } from "@/shared/components/ui/empty-state";
 import { Skeleton } from "@/shared/components/ui/skeleton";

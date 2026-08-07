@@ -20,7 +20,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 
 import { ApiError } from "@/lib/httpClient";
 import { Badge } from "@/shared/components/ui/badge";

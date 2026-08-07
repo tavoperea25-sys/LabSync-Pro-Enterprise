@@ -1,5 +1,5 @@
 import { CalendarClock } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { Skeleton } from "@/shared/components/ui/skeleton";
 

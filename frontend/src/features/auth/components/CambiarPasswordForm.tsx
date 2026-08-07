@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { useCambiarPasswordPropio } from "@/features/configuracion/hooks/useConfiguracion";
 import { ApiError } from "@/lib/httpClient";

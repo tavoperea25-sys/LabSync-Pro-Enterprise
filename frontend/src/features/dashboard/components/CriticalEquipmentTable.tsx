@@ -1,5 +1,5 @@
 import { AlertTriangle, ShieldCheck } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 import { EquipoEstadoBadge } from "@/features/equipos/components/EquipoEstadoBadge";
 import type { EstadoOperativo } from "@/features/equipos/types";

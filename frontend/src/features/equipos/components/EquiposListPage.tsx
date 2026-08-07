@@ -1,6 +1,6 @@
 import { ClipboardList, Download, Plus, Search } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { Button } from "@/shared/components/ui/button";
 import { EmptyState } from "@/shared/components/ui/empty-state";
