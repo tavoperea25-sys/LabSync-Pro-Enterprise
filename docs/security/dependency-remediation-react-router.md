@@ -75,7 +75,18 @@ Con esto, de las 35 alertas originales del primer reporte, solo quedaría **1** 
 ## Riesgos pendientes
 
 - `pytest` (backend, moderada) — última alerta del repo, requiere su propia fase (major bump 8→9, riesgo sobre fixtures/plugins de los 352 tests).
-- No se verificó manualmente en un navegador real con backend corriendo (Docker no disponible en el momento de esta fase) — la cobertura de `ProtectedRoute.test.tsx`/`LoginPage.test.tsx`/`navigation.test.ts` más el `typecheck` estricto (que revienta si falta cualquier símbolo del nuevo paquete) se consideran suficientes, pero una verificación manual de clic-a-clic en `npm run dev` antes o después de fusionar es recomendable dado que esta fase toca el enrutamiento de toda la SPA.
+- Ninguno — ver "Verificación manual en navegador real" más abajo.
+
+## Verificación manual en navegador real
+
+Con el stack completo levantado (`docker compose up postgres minio backend worker` + `npm run dev` en frontend, código de esta rama, contra el usuario admin de `seed_dev_tenant.py`):
+
+- **Login** (`/` → formulario → dashboard con datos reales) — ✅
+- **Navegación directa por URL** a rutas protegidas (`/equipos`, `/documentos`) — ✅ ambas renderizan con datos reales del backend
+- **Detalle de equipo vía Omnibox** (Ctrl+K, buscar "microscopio", clic en el resultado) — ✅ navega correctamente a `/equipos/{id}` y cierra el diálogo; ejercita `useNavigate()` importado desde `react-router` (el mismo mecanismo cubierto por el mock corregido en `Omnibox.test.tsx`)
+- **Logout** (menú de perfil → "Cerrar sesión") — ✅ redirige a `/login`
+- **Guardia de ruta protegida estando deslogueado**: navegación directa a `/equipos` sin sesión — ✅ redirige a `/login` (confirma que `Navigate` en `ProtectedRoute.tsx` sigue funcionando)
+- Consola del navegador revisada de punta a punta: solo errores esperados (401 tras logout, 404 de un token QR inválido de un flujo no relacionado) — cero errores de módulos, imports rotos, o crashes de routing.
 
 ## Recomendaciones
 
