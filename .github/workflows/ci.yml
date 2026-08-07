@@ -51,6 +51,7 @@ jobs:
         run: |
           docker run -d --name minio-ci -p 9000:9000 \
             -e MINIO_ROOT_USER=labsync -e MINIO_ROOT_PASSWORD=labsync123 \
+            -e MINIO_KMS_SECRET_KEY="labsync-master-key:w09R7021SABtUCVnFUVbShEhWfn2ONiWmFbD0ruskaw=" \
             minio/minio:latest server /data
           for i in $(seq 1 30); do
             if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
