@@ -1,5 +1,5 @@
 import { KeyRound, LogOut } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { AmbientBackground } from "@/shared/components/AmbientBackground";
 

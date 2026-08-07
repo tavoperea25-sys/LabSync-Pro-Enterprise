@@ -1,6 +1,6 @@
 import { ClipboardList, FileUp, ShieldCheck, Wrench, Zap, FileBarChart } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 const ACCIONES: { label: string; hint: string; icon: LucideIcon; to: string }[] = [
   { label: "Registrar equipo", hint: "Alta en el inventario", icon: ClipboardList, to: "/equipos/nuevo" },

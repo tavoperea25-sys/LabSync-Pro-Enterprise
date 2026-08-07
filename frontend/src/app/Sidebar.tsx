@@ -1,5 +1,5 @@
 import { FlaskConical } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { NavLink } from "react-router";
 
 import { useAuth } from "@/features/auth/hooks/AuthProvider";
 

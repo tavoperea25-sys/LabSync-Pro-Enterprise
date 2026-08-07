@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 
 import { COLOR_POR_TIPO, ETIQUETAS_TIPO_EVENTO, type EventoCalendario } from "../types";
 

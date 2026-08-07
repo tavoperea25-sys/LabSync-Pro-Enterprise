@@ -13,7 +13,7 @@ import { animate } from "motion";
 import { motion, useReducedMotion, type Variants } from "motion/react";
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 import { z } from "zod";
 
 import { ApiError } from "@/lib/httpClient";

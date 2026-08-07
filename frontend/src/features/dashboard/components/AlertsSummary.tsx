@@ -1,5 +1,5 @@
 import { AlertTriangle, Bell, CheckCircle2 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 import { useAlertas } from "@/features/alertas/hooks/useAlertas";
 import { Skeleton } from "@/shared/components/ui/skeleton";
