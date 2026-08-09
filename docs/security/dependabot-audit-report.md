@@ -5,6 +5,31 @@
 
 ---
 
+## ✅ Estado final (actualizado 2026-08-07): 0 alertas abiertas
+
+Las 35 alertas descritas en esta auditoría (punto de partida, ver "Resumen ejecutivo" y tabla completa más abajo) quedaron **todas resueltas**, confirmado en vivo con `gh api .../dependabot/alerts` contra `main` tras la última fusión. El resto del documento se conserva sin modificar como registro histórico del análisis original — esta sección solo añade el desenlace.
+
+Requisito previo, no anticipado en el análisis original: el gate de aislamiento multi-tenant de CI (RLS) estaba deshabilitado en silencio desde el primer commit del repo (rol de Postgres equivocado en `ci.yml`), y CI nunca había pasado en verde. Sin arreglar eso primero, ninguna de las fases siguientes hubiera tenido una señal de CI confiable — ver [fix(ci) #7](https://github.com/tavoperea25-sys/LabSync-Pro-Enterprise/pull/7).
+
+| Grupo | Paquete(s) | Alertas cerradas | PR → `develop` | PR → `main` | Detalle |
+|---|---|---|---|---|---|
+| B | `PyJWT`, `python-dotenv` | 14 | [#5](https://github.com/tavoperea25-sys/LabSync-Pro-Enterprise/pull/5) | [#9](https://github.com/tavoperea25-sys/LabSync-Pro-Enterprise/pull/9) | [dependency-remediation-phase-1.md](dependency-remediation-phase-1.md) |
+| C | `cryptography` | 14 | [#6](https://github.com/tavoperea25-sys/LabSync-Pro-Enterprise/pull/6) | [#9](https://github.com/tavoperea25-sys/LabSync-Pro-Enterprise/pull/9) | [dependency-remediation-cryptography.md](dependency-remediation-cryptography.md) |
+| C | `vitest` (+ vite/esbuild anidados) | 5 (incl. la crítica) | [#8](https://github.com/tavoperea25-sys/LabSync-Pro-Enterprise/pull/8) | [#36](https://github.com/tavoperea25-sys/LabSync-Pro-Enterprise/pull/36) | [dependency-remediation-vitest.md](dependency-remediation-vitest.md) |
+| C | `react-router` (react-router-dom → react-router v8) | 1 | [#35](https://github.com/tavoperea25-sys/LabSync-Pro-Enterprise/pull/35) | [#36](https://github.com/tavoperea25-sys/LabSync-Pro-Enterprise/pull/36) | [dependency-remediation-react-router.md](dependency-remediation-react-router.md) |
+| C | `pytest` | 1 | [#37](https://github.com/tavoperea25-sys/LabSync-Pro-Enterprise/pull/37) | [#38](https://github.com/tavoperea25-sys/LabSync-Pro-Enterprise/pull/38) | [dependency-remediation-pytest.md](dependency-remediation-pytest.md) |
+| — | **Total** | **35** | | | |
+
+Cada fase se verificó de forma independiente (lint, typecheck, suite completa de tests, y en el caso de `react-router`, además una pasada manual de navegación en navegador real contra el backend real) antes de fusionarse — no se aplicó ningún bump "a ciegas" pese a que casi todo el Grupo C eran saltos de versión mayor. El detalle de análisis de impacto de cada paquete está en su propio documento (tabla de arriba).
+
+**Nota de proceso, para la próxima vez:** Dependabot calcula su conteo de alertas sobre la rama por defecto (`main`), no sobre `develop` — cada fase de esta serie requirió un PR adicional de promoción `develop` → `main` para que el cierre se reflejara realmente en GitHub. Fusionar solo a `develop` no mueve el contador aunque el código ya esté corregido.
+
+## Estado de GitHub Projects — actualización
+
+Sigue sin resolverse (ver sección original más abajo, sin cambios): el token de `gh` no tiene el scope `project`. No bloqueó nada de esta serie de remediación, que se gestionó enteramente vía PRs normales.
+
+---
+
 ## Resumen ejecutivo
 
 GitHub detectó 35 alertas de Dependabot: **1 crítica, 14 altas, 14 moderadas, 6 bajas**, repartidas en 8 paquetes distintos (4 backend, 4 frontend). Los números de esta auditoría reconcilian exactamente con el resumen de GitHub.
