@@ -37,7 +37,7 @@
     "eslint-plugin-react-refresh": "^0.4.16",
     "typescript-eslint": "^8.18.2",
     "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.17",
+    "tailwindcss": "^4.3.3",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.7.2",
     "vite": "^7.0.0",
