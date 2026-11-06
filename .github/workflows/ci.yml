@@ -37,7 +37,7 @@ jobs:
       - name: Type-check (mypy)
         run: mypy app
       - name: Levantar MinIO real para tests de almacenamiento
-        # No se usa `services:` porque la imagen minio/minio no arranca el
+        # No se usa `services:` porque la imagen de MinIO no arranca el
         # servidor sin un comando explícito (`server /data`), y `services:`
         # de GitHub Actions no admite fijar un `command:` — solo `image`,
         # `env`, `ports`, `volumes` y `options`. Puerto 9000 (no uno
@@ -48,11 +48,27 @@ jobs:
         # (interno/público) dejarían de coincidir y las operaciones
         # server-to-server (p. ej. copiar documento) fallarían con
         # NoSuchKey, aunque la subida haya funcionado.
+        #
+        # `bitnamilegacy/minio:latest` en vez de `minio/minio:latest`
+        # (2026-11-06): Docker Hub eliminó el repositorio oficial
+        # `minio/minio` (y `minio/mc`) — confirmado, afecta a cualquier CI
+        # que no tenga ya la imagen en caché local, rompiendo este paso con
+        # "pull access denied: repository does not exist". El mirror de
+        # MinIO en quay.io (sugerido como alternativa en varios reportes)
+        # también devuelve 401 para pulls anónimos, tanto en `:latest` como
+        # en tags de versión fijos — se probó ambos antes de este cambio.
+        # `bitnamilegacy/minio` sí se puede bajar sin login; se verificó que
+        # acepta el mismo comando (`server /data`) y las mismas variables de
+        # entorno (`MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`/
+        # `MINIO_KMS_SECRET_KEY`), y que `bucket_exists`/`make_bucket`/
+        # `set_bucket_encryption` (SSE-S3) funcionan igual — es un mirror
+        # comunitario, no oficial de MinIO, así que conviene revisarlo de
+        # nuevo si en el futuro aparece un reemplazo oficial.
         run: |
           docker run -d --name minio-ci -p 9000:9000 \
             -e MINIO_ROOT_USER=labsync -e MINIO_ROOT_PASSWORD=labsync123 \
             -e MINIO_KMS_SECRET_KEY="labsync-master-key:w09R7021SABtUCVnFUVbShEhWfn2ONiWmFbD0ruskaw=" \
-            minio/minio:latest server /data
+            bitnamilegacy/minio:latest server /data
           for i in $(seq 1 30); do
             if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
               echo "MinIO listo tras ${i} intento(s)"

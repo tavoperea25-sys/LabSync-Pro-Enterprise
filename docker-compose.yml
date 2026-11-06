@@ -20,7 +20,20 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    # `bitnamilegacy/minio:latest` en vez de `minio/minio:latest`
+    # (2026-11-06): Docker Hub eliminó el repositorio oficial `minio/minio`
+    # (y `minio/mc`) — cualquier `docker compose up` sin la imagen ya en
+    # caché local falla con "pull access denied: repository does not
+    # exist". El mirror de MinIO en quay.io (sugerido en varios reportes
+    # como alternativa) también devuelve 401 para pulls anónimos, tanto en
+    # `:latest` como en tags de versión fijos — se probó antes de este
+    # cambio. `bitnamilegacy/minio` sí se puede bajar sin login; se
+    # verificó que acepta el mismo comando/flags de abajo y las mismas
+    # variables de entorno, y que la creación de buckets + cifrado SSE-S3
+    # funcionan igual (ver mismo comentario en
+    # .github/workflows/ci.yml) — es un mirror comunitario, no oficial de
+    # MinIO, revisar de nuevo si aparece un reemplazo oficial.
+    image: bitnamilegacy/minio:latest
     environment:
       # Parametrizado (repositorio público) — ver .env.example en la raíz.
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-labsync}
