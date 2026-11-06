@@ -106,7 +106,27 @@ export async function apiFetchBlob(ruta: string, options: RequestOptions = {}): 
   return response.blob();
 }
 
+// Revisión de seguridad módulo Auth, hallazgo 1 — varias peticiones que
+// reciben 401 casi a la vez disparaban cada una su propio POST
+// /auth/refresh con la misma cookie. El backend rota el refresh token en
+// cada llamada, así que la segunda veía el token ya usado por la primera y
+// lo trataba como un posible robo, cerrando todas las sesiones del
+// usuario por una carrera benigna (ver AuthService.refresh). Single-flight:
+// mientras haya un refresh en curso, cualquier llamada adicional espera esa
+// MISMA promesa en vez de disparar una petición nueva.
+let refrescoEnCurso: Promise<boolean> | null = null;
+
 async function intentarRefresh(): Promise<boolean> {
+  if (refrescoEnCurso) {
+    return refrescoEnCurso;
+  }
+  refrescoEnCurso = ejecutarRefresh().finally(() => {
+    refrescoEnCurso = null;
+  });
+  return refrescoEnCurso;
+}
+
+async function ejecutarRefresh(): Promise<boolean> {
   try {
     const respuesta = await fetch("/api/v1/auth/refresh", { method: "POST", credentials: "include" });
     if (!respuesta.ok) return false;

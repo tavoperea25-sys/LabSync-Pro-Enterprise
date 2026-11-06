@@ -1,6 +1,19 @@
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Valores de desarrollo de los campos sensibles — usados por el validador de
+# abajo para detectar si alguno quedó sin cambiar en producción. Duplicados
+# literalmente de los defaults de los campos correspondientes (no se puede
+# leer el default de un campo Pydantic de forma genérica y fiable antes de
+# que la instancia exista).
+_SECRETOS_DEV_POR_DEFECTO = {
+    "database_url": "postgresql+psycopg2://labsync_app:labsync_app@localhost:5432/labsync",
+    "database_url_migraciones": "postgresql+psycopg2://labsync:labsync@localhost:5432/labsync",
+    "minio_access_key": "labsync",
+    "minio_secret_key": "labsync123",
+}
 
 
 class Settings(BaseSettings):
@@ -62,6 +75,24 @@ class Settings(BaseSettings):
     jwt_algoritmo: str = "RS256"
     access_token_expira_minutos: int = 15
     refresh_token_expira_dias: int = 7
+    # "Recordarme" en /login — duración de la cookie/sesión cuando el
+    # usuario lo marca (en vez del `refresh_token_expira_dias` de arriba).
+    # Antes vivía hardcodeado como `30` en el router y nunca llegaba a
+    # `AuthService` ni a la fila de `sesiones` — ver auth_service.py.
+    refresh_recordarme_dias: int = 30
+    # Revisión de seguridad módulo Auth — hallazgo 1: varias peticiones con
+    # 401 pueden disparar refresh concurrente con la misma cookie (de
+    # distintas pestañas/dispositivos; una sola pestaña ya se deduplica en
+    # httpClient.ts). Sin esta ventana, la segunda petición ve el refresh
+    # token ya rotado por la primera y dispara la detección de reuso,
+    # cerrando todas las sesiones del usuario por una carrera benigna. Ver
+    # AuthService.refresh.
+    refresh_ventana_gracia_segundos: int = 10
+    # Hallazgo 5 — el bloqueo progresivo por intentos fallidos
+    # (AuthService._registrar_intento_fallido) duplica el tiempo de espera
+    # en cada intento adicional sin límite; sin techo, unos pocos intentos
+    # más lo llevan a cientos de horas. 15 minutos por defecto.
+    bloqueo_maximo_segundos: int = 900
 
     # RNF-SEG — auditoría 2026-07-31, hallazgo crítico C5: `/login` y
     # `/refresh` no tenían rate limiting (a diferencia de QR, ver
@@ -125,6 +156,32 @@ class Settings(BaseSettings):
     # Manual de usuario (PDF) de la ficha técnica de un equipo (RF-EQ-01) —
     # bucket propio, distinto del de fotografías (tipo de contenido distinto).
     minio_bucket_manuales_equipos: str = "manuales-equipos"
+
+    @model_validator(mode="after")
+    def _validar_secretos_en_produccion(self) -> "Settings":
+        # Revisión de seguridad módulo Auth — hallazgo 3: docker-compose.yml
+        # tenía valores de desarrollo como fallback de secretos reales
+        # (contraseña de Postgres, de MinIO, clave KMS). Esto no detecta esa
+        # situación por sí solo (ocurre a nivel de compose, antes de que
+        # Python arranque) — complementa el cambio en docker-compose.yml
+        # (`${VAR:?mensaje}`) con una segunda barrera: aunque algo llegue a
+        # `Settings` con ENTORNO=produccion, si un campo sensible sigue
+        # siendo literalmente el valor de desarrollo, la app se niega a
+        # arrancar en vez de correr en producción con credenciales públicas.
+        if self.entorno == "produccion":
+            conservados = [
+                campo
+                for campo, valor_dev in _SECRETOS_DEV_POR_DEFECTO.items()
+                if getattr(self, campo) == valor_dev
+            ]
+            if conservados:
+                raise ValueError(
+                    "ENTORNO=produccion pero los siguientes secretos siguen en su "
+                    f"valor de desarrollo por defecto: {', '.join(conservados)}. "
+                    "Configuralos vía variables de entorno/.env antes de arrancar "
+                    "en producción."
+                )
+        return self
 
 
 @lru_cache

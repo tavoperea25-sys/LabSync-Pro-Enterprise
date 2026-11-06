@@ -99,6 +99,7 @@ def login(
             laboratorio_id=laboratorio_id,
             correo=datos.correo,
             password=datos.password,
+            recordarme=datos.recordarme,
             ip_origen=ip_valida(request.client.host if request.client else None),
             user_agent=request.headers.get("user-agent"),
         )
@@ -113,8 +114,7 @@ def login(
 
     db.commit()
 
-    dias = 30 if datos.recordarme else 7
-    _set_cookie_refresh(response, resultado.refresh_token, dias)
+    _set_cookie_refresh(response, resultado.refresh_token, resultado.duracion_dias_cookie)
     return _a_respuesta(resultado)
 
 
@@ -146,7 +146,7 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
     )
     db.commit()
 
-    _set_cookie_refresh(response, resultado.refresh_token, 7)
+    _set_cookie_refresh(response, resultado.refresh_token, resultado.duracion_dias_cookie)
     return _a_respuesta(resultado)
 
 

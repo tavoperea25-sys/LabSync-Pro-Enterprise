@@ -40,6 +40,8 @@ class SesionActiva:
     refresh_token_hash: str
     expira_en: datetime
     revocada: bool
+    revocada_en: datetime | None
+    duracion_dias: int
     ip_origen: str | None
     user_agent: str | None
     creado_en: datetime

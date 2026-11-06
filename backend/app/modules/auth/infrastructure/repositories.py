@@ -214,6 +214,8 @@ def _sesion_a_dominio(fila: Sesion) -> SesionActiva:
         refresh_token_hash=fila.refresh_token_hash,
         expira_en=fila.expira_en,
         revocada=fila.revocada,
+        revocada_en=fila.revocada_en,
+        duracion_dias=fila.duracion_dias,
         ip_origen=fila.ip_origen,
         user_agent=fila.user_agent,
         creado_en=fila.creado_en,
@@ -230,6 +232,7 @@ class SesionRepositorySQLAlchemy:
         laboratorio_id: uuid.UUID,
         refresh_token_hash: str,
         expira_en: datetime,
+        duracion_dias: int,
         ip_origen: str | None,
         user_agent: str | None,
     ) -> SesionActiva:
@@ -238,6 +241,7 @@ class SesionRepositorySQLAlchemy:
             laboratorio_id=laboratorio_id,
             refresh_token_hash=refresh_token_hash,
             expira_en=expira_en,
+            duracion_dias=duracion_dias,
             ip_origen=ip_origen,
             user_agent=user_agent,
         )
@@ -250,8 +254,33 @@ class SesionRepositorySQLAlchemy:
         fila = self._db.execute(stmt).scalar_one_or_none()
         return _sesion_a_dominio(fila) if fila else None
 
+    def buscar_por_hash_para_refresh(self, refresh_token_hash: str) -> SesionActiva | None:
+        """Variante de `buscar_por_hash` con `SELECT ... FOR UPDATE` — solo
+        para `AuthService.refresh`. Bloquea la fila hasta que la transacción
+        termine (commit/rollback), para que una segunda petición de refresh
+        concurrente con el mismo token vea de forma confiable el resultado ya
+        rotado de la primera, en vez de competir sobre una lectura sin
+        bloqueo. Revisión de seguridad módulo Auth, hallazgo 1."""
+        stmt = select(Sesion).where(Sesion.refresh_token_hash == refresh_token_hash).with_for_update()
+        fila = self._db.execute(stmt).scalar_one_or_none()
+        return _sesion_a_dominio(fila) if fila else None
+
     def revocar(self, sesion_id: uuid.UUID) -> None:
         self._db.execute(update(Sesion).where(Sesion.id == sesion_id).values(revocada=True))
+
+    def revocar_por_rotacion(self, sesion_id: uuid.UUID) -> None:
+        """Como `revocar`, pero además marca `revocada_en` — usado
+        exclusivamente por la rotación normal de refresh en
+        `AuthService.refresh`, nunca por `logout` ni por
+        `revocar_todas_de_usuario`. Es justamente esa marca de tiempo la que
+        habilita la ventana de gracia: una sesión cerrada por logout
+        explícito o por detección de compromiso NUNCA debe calificar para la
+        ventana de gracia, así que esas dos rutas deliberadamente no tocan
+        esta columna (la dejan en su valor previo — NULL o una rotación
+        legítima ya vieja)."""
+        self._db.execute(
+            update(Sesion).where(Sesion.id == sesion_id).values(revocada=True, revocada_en=func.now())
+        )
 
     def revocar_todas_de_usuario(self, usuario_id: uuid.UUID) -> None:
         self._db.execute(

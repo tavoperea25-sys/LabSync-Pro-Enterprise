@@ -115,7 +115,7 @@ cd login
 
 | Archivo | Propósito |
 |---|---|
-| `.env.example` (raíz) | Credenciales de `postgres`/`minio` que lee `docker-compose.yml`. Copiar a `.env` solo si necesitas cambiar los valores por defecto de desarrollo. |
+| `.env.example` (raíz) | Credenciales de `postgres`/`minio` que lee `docker-compose.yml`. **Copiar a `.env` es obligatorio** — los secretos reales (`POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `MINIO_KMS_SECRET_KEY`) no tienen valor por defecto en `docker-compose.yml`; sin un `.env`, `docker compose up` falla explícitamente en vez de arrancar con los valores de ejemplo de un repositorio público. |
 | `backend/.env.example` | Configuración del backend (base de datos, JWT, MinIO, CORS, rate limiting). Copiar a `backend/.env`. |
 | `frontend/.env.example` | Configuración del frontend (proxy de la API en desarrollo). Copiar a `frontend/.env`. |
 
@@ -128,6 +128,9 @@ Ninguna variable de entorno con valores reales se versiona — todos los `.env` 
 ### Con Docker (recomendado)
 
 ```bash
+cp .env.example .env    # obligatorio — ver tabla de "Variables de entorno" arriba
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
 docker compose up --build
 ```
 
