@@ -20,30 +20,34 @@ services:
       retries: 10
 
   minio:
-    # `bitnamilegacy/minio:latest` en vez de `minio/minio:latest`
-    # (2026-11-06): Docker Hub eliminó el repositorio oficial `minio/minio`
-    # (y `minio/mc`) — cualquier `docker compose up` sin la imagen ya en
-    # caché local falla con "pull access denied: repository does not
-    # exist". El mirror de MinIO en quay.io (sugerido en varios reportes
-    # como alternativa) también devuelve 401 para pulls anónimos, tanto en
+    # `bitnamilegacy/minio` en vez de `minio/minio:latest` (2026-11-06):
+    # Docker Hub eliminó el repositorio oficial `minio/minio` (y
+    # `minio/mc`) — cualquier `docker compose up` sin la imagen ya en caché
+    # local falla con "pull access denied: repository does not exist". El
+    # mirror de MinIO en quay.io (sugerido en varios reportes como
+    # alternativa) también devuelve 401 para pulls anónimos, tanto en
     # `:latest` como en tags de versión fijos — se probó antes de este
-    # cambio. `bitnamilegacy/minio` sí se puede bajar sin login; se
-    # verificó que acepta el mismo comando/flags de abajo y las mismas
-    # variables de entorno, y que la creación de buckets + cifrado SSE-S3
-    # funcionan igual (ver mismo comentario en
-    # .github/workflows/ci.yml) — es un mirror comunitario, no oficial de
-    # MinIO, revisar de nuevo si aparece un reemplazo oficial.
+    # cambio. `bitnamilegacy/minio` sí se puede bajar sin login.
     #
-    # `user: root`: a diferencia de la imagen oficial (que corre como root
-    # por defecto), esta imagen de Bitnami corre como UID 1001 — eso rompe
-    # la escritura sobre el volumen `labsync_minio_data` existente (creado
-    # por la imagen anterior, dueño root) y, se confirmó, también sobre un
-    # filesystem efímero nuevo en el runner de GitHub ("file access
-    # denied" en ambos casos, aunque no en toda máquina). Correrlo como
-    # root iguala el comportamiento de la imagen oficial y evita esta
-    # clase de problema de permisos por completo.
-    user: root
-    image: bitnamilegacy/minio:latest
+    # IMPORTANTE — esto es un puente temporal, no una solución definitiva:
+    # `bitnamilegacy` es el archivo congelado al que Bitnami/Broadcom movió
+    # sus imágenes gratuitas (~agosto 2025) — Docker Hub ya advierte que
+    # "no se actualiza más" y que el espacio de nombres completo "puede
+    # eliminarse en el futuro", sin ningún parche de seguridad mientras
+    # tanto. Es decir, el mismo destino que tuvo `minio/minio` podría
+    # repetirse acá. Ver issue de deuda técnica "Definir almacenamiento de
+    # objetos mantenido antes de producción" para evaluar un reemplazo
+    # definitivo (imagen oficial compilada desde fuente, o una alternativa
+    # S3 con imagen propia activamente mantenida) antes de producción.
+    #
+    # Fijado por digest (no por `:latest`) para reproducibilidad — mismos
+    # bytes siempre, sin sorpresas si el tag se repunta. Esto NO protege
+    # contra que Docker Hub borre el repositorio entero (como con
+    # `minio/minio`): en ese caso el digest tampoco resolvería. Digest
+    # obtenido 2026-11-06 de `bitnamilegacy/minio:latest` (ya verificado
+    # con los mismos comandos/flags de abajo y con bucket_exists/
+    # make_bucket/set_bucket_encryption funcionando igual).
+    image: bitnamilegacy/minio@sha256:451fe6858cb770cc9d0e77ba811ce287420f781c7c1b806a386f6896471a349c
     environment:
       # Parametrizado (repositorio público) — ver .env.example en la raíz.
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-labsync}
