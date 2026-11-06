@@ -64,8 +64,17 @@ jobs:
         # `set_bucket_encryption` (SSE-S3) funcionan igual — es un mirror
         # comunitario, no oficial de MinIO, así que conviene revisarlo de
         # nuevo si en el futuro aparece un reemplazo oficial.
+        #
+        # `--user root`: a diferencia de la imagen oficial (que corre como
+        # root por defecto), esta imagen de Bitnami corre como UID 1001 —
+        # en el runner de GitHub eso dio "FATAL Unable to initialize
+        # backend: file access denied" al intentar escribir /data, aunque
+        # en una máquina de desarrollo normal no fallaba. Correrlo como
+        # root (contenedor efímero, sin datos sensibles, descartado al
+        # final del job) iguala el comportamiento de la imagen oficial y
+        # evita esta clase de problema de permisos por completo.
         run: |
-          docker run -d --name minio-ci -p 9000:9000 \
+          docker run -d --name minio-ci -p 9000:9000 --user root \
             -e MINIO_ROOT_USER=labsync -e MINIO_ROOT_PASSWORD=labsync123 \
             -e MINIO_KMS_SECRET_KEY="labsync-master-key:w09R7021SABtUCVnFUVbShEhWfn2ONiWmFbD0ruskaw=" \
             bitnamilegacy/minio:latest server /data

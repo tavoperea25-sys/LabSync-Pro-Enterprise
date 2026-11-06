@@ -33,6 +33,16 @@ services:
     # funcionan igual (ver mismo comentario en
     # .github/workflows/ci.yml) — es un mirror comunitario, no oficial de
     # MinIO, revisar de nuevo si aparece un reemplazo oficial.
+    #
+    # `user: root`: a diferencia de la imagen oficial (que corre como root
+    # por defecto), esta imagen de Bitnami corre como UID 1001 — eso rompe
+    # la escritura sobre el volumen `labsync_minio_data` existente (creado
+    # por la imagen anterior, dueño root) y, se confirmó, también sobre un
+    # filesystem efímero nuevo en el runner de GitHub ("file access
+    # denied" en ambos casos, aunque no en toda máquina). Correrlo como
+    # root iguala el comportamiento de la imagen oficial y evita esta
+    # clase de problema de permisos por completo.
+    user: root
     image: bitnamilegacy/minio:latest
     environment:
       # Parametrizado (repositorio público) — ver .env.example en la raíz.
