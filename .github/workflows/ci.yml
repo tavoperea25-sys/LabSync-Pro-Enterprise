@@ -69,14 +69,21 @@ jobs:
             -e MINIO_ROOT_USER=labsync -e MINIO_ROOT_PASSWORD=labsync123 \
             -e MINIO_KMS_SECRET_KEY="labsync-master-key:w09R7021SABtUCVnFUVbShEhWfn2ONiWmFbD0ruskaw=" \
             bitnamilegacy/minio:latest server /data
-          for i in $(seq 1 30); do
+          # 60 intentos (antes 30) — bitnamilegacy/minio arranca con un
+          # entrypoint bash más pesado que el binario oficial (branding,
+          # chequeos adicionales) y tardó más de 30s en quedar listo en el
+          # runner de GitHub (que además es más lento que una máquina de
+          # desarrollo) la primera vez que se probó este cambio, aunque
+          # localmente respondía en 1-2s.
+          for i in $(seq 1 60); do
             if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
               echo "MinIO listo tras ${i} intento(s)"
               exit 0
             fi
             sleep 1
           done
-          echo "MinIO no respondió a tiempo" >&2
+          echo "MinIO no respondió a tiempo — logs del contenedor:" >&2
+          docker logs minio-ci >&2
           exit 1
       - name: Tests (incluye gate de aislamiento multi-tenant)
         env:
