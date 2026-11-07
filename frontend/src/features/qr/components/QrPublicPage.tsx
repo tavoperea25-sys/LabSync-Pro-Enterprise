@@ -14,7 +14,7 @@ import { EquipoEstadoBadge } from "@/features/equipos/components/EquipoEstadoBad
 import { useEquipoPorQr, useReportarIncidencia } from "../hooks/useQrPublico";
 
 const esquemaIncidencia = z.object({
-  descripcion: z.string().min(1, "Describe brevemente la incidencia.").max(1000),
+  descripcion: z.string().min(1, { error: "Describe brevemente la incidencia." }).max(1000),
   contacto_nombre: z.string().max(150).optional(),
   contacto_medio: z.string().max(150).optional(),
 });
