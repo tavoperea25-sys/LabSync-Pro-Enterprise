@@ -139,11 +139,21 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
     set_tenant_context(db, uuid.UUID(claims["laboratorio_id"]))
     service = _construir_service(db)
 
-    resultado = service.refresh(
-        refresh_token_plano=token_actual,
-        ip_origen=ip_valida(request.client.host if request.client else None),
-        user_agent=request.headers.get("user-agent"),
-    )
+    try:
+        resultado = service.refresh(
+            refresh_token_plano=token_actual,
+            ip_origen=ip_valida(request.client.host if request.client else None),
+            user_agent=request.headers.get("user-agent"),
+        )
+    except ErrorDeDominio:
+        # Igual que en login (ver comentario arriba): si se detecta un
+        # reuso fuera de la ventana de gracia, `AuthService.refresh` ya
+        # llamó a `revocar_todas_de_usuario` antes de lanzar `TokenInvalido`
+        # — sin este commit, `db.close()` revertía esa revocación en
+        # silencio y la defensa contra robo de token nunca persistía.
+        db.commit()
+        raise
+
     db.commit()
 
     _set_cookie_refresh(response, resultado.refresh_token, resultado.duracion_dias_cookie)

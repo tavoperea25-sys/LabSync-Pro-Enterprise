@@ -277,9 +277,20 @@ class SesionRepositorySQLAlchemy:
         explícito o por detección de compromiso NUNCA debe calificar para la
         ventana de gracia, así que esas dos rutas deliberadamente no tocan
         esta columna (la dejan en su valor previo — NULL o una rotación
-        legítima ya vieja)."""
+        legítima ya vieja).
+
+        `COALESCE`: `AuthService.refresh` llama a este método también en el
+        caso de reuso dentro de la ventana de gracia (la sesión ya estaba
+        revocada). Si aquí se pisara `revocada_en` sin condición, cada reuso
+        reiniciaría la ventana desde "ahora" — un atacante reutilizando el
+        token cada menos de `refresh_ventana_gracia_segundos` nunca vería
+        expirar la ventana y la detección de robo nunca se activaría.
+        `COALESCE` conserva la marca de la PRIMERA rotación; solo la fija si
+        todavía es NULL."""
         self._db.execute(
-            update(Sesion).where(Sesion.id == sesion_id).values(revocada=True, revocada_en=func.now())
+            update(Sesion)
+            .where(Sesion.id == sesion_id)
+            .values(revocada=True, revocada_en=func.coalesce(Sesion.revocada_en, func.now()))
         )
 
     def revocar_todas_de_usuario(self, usuario_id: uuid.UUID) -> None:
