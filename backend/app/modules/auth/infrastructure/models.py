@@ -123,6 +123,13 @@ class Sesion(Base):
     refresh_token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     expira_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revocada: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Revisión de seguridad módulo Auth, hallazgo 1 — ver
+    # alembic/versions/0017_sesion_duracion_y_gracia.py y AuthService.refresh
+    # (ventana de gracia contra refresh concurrente).
+    revocada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Hallazgo 2 — duración elegida al crear esta cadena de sesiones
+    # ("Recordarme" o no), propagada a cada rotación. Ver AuthService.login/refresh.
+    duracion_dias: Mapped[int] = mapped_column(Integer, nullable=False)
     ip_origen: Mapped[str | None] = mapped_column(INET, nullable=True)
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")

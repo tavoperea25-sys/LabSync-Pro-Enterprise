@@ -53,6 +53,7 @@
 
 - Un usuario puede ver y cerrar remotamente sus sesiones activas (RF-USR-06).
 - Desactivar un usuario invalida inmediatamente todos sus refresh tokens activos (RN-USR-01).
+- **Ventana de gracia de rotación de refresh token**: una rotación tolera el reuso del token anterior durante una ventana corta y fija (10 s por defecto, `refresh_ventana_gracia_segundos`), medida desde la *primera* rotación de ese token — no se reinicia con cada reuso dentro de la ventana. Existe para absorber una carrera benigna de refresh concurrente (dos pestañas/dispositivos presentando la misma cookie a la vez). **Trade-off aceptado**: un reuso legítimo dentro de la ventana crea una sesión adicional (el cliente que perdió la carrera se queda con un token huérfano en vez de ser desconectado) — se acepta a cambio de no cerrar todas las sesiones del usuario por una condición de carrera normal del propio frontend.
 
 ## 9. Seguridad en integraciones futuras (preparación, no implementación v1)
 
