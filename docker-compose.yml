@@ -3,11 +3,15 @@ services:
     image: postgres:16-alpine
     environment:
       # Parametrizado (repositorio público) — ver .env.example en la raíz.
-      # El valor tras ":-" es el default de desarrollo, idéntico al que
-      # estaba hardcodeado antes: sin un .env real, el comportamiento local
-      # no cambia.
+      # POSTGRES_USER/POSTGRES_DB son identificadores, no secretos — se
+      # dejan con un default de desarrollo. POSTGRES_PASSWORD es un secreto
+      # real: revisión de seguridad módulo Auth, hallazgo 3 — antes tenía un
+      # fallback hardcodeado (`:-labsync`), así que un despliegue sin un
+      # .env real arrancaba igual con la contraseña de ejemplo del repo
+      # público, en silencio. `${VAR:?mensaje}` hace que falte explícitamente
+      # si no está definida — crea un .env en la raíz (ver .env.example).
       POSTGRES_USER: ${POSTGRES_USER:-labsync}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-labsync}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Definí POSTGRES_PASSWORD en un .env en la raíz (ver .env.example) — no hay fallback de desarrollo para un secreto real.}
       POSTGRES_DB: ${POSTGRES_DB:-labsync}
     ports:
       - "5432:5432"
@@ -20,17 +24,51 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    # `bitnamilegacy/minio` en vez de `minio/minio:latest` (2026-11-06):
+    # Docker Hub eliminó el repositorio oficial `minio/minio` (y
+    # `minio/mc`) — cualquier `docker compose up` sin la imagen ya en caché
+    # local falla con "pull access denied: repository does not exist". El
+    # mirror de MinIO en quay.io (sugerido en varios reportes como
+    # alternativa) también devuelve 401 para pulls anónimos, tanto en
+    # `:latest` como en tags de versión fijos — se probó antes de este
+    # cambio. `bitnamilegacy/minio` sí se puede bajar sin login.
+    #
+    # IMPORTANTE — esto es un puente temporal, no una solución definitiva:
+    # `bitnamilegacy` es el archivo congelado al que Bitnami/Broadcom movió
+    # sus imágenes gratuitas (~agosto 2025) — Docker Hub ya advierte que
+    # "no se actualiza más" y que el espacio de nombres completo "puede
+    # eliminarse en el futuro", sin ningún parche de seguridad mientras
+    # tanto. Es decir, el mismo destino que tuvo `minio/minio` podría
+    # repetirse acá. Ver issue de deuda técnica "Definir almacenamiento de
+    # objetos mantenido antes de producción" para evaluar un reemplazo
+    # definitivo (imagen oficial compilada desde fuente, o una alternativa
+    # S3 con imagen propia activamente mantenida) antes de producción.
+    #
+    # Fijado por digest (no por `:latest`) para reproducibilidad — mismos
+    # bytes siempre, sin sorpresas si el tag se repunta. Esto NO protege
+    # contra que Docker Hub borre el repositorio entero (como con
+    # `minio/minio`): en ese caso el digest tampoco resolvería. Digest
+    # obtenido 2026-11-06 de `bitnamilegacy/minio:latest` (ya verificado
+    # con los mismos comandos/flags de abajo y con bucket_exists/
+    # make_bucket/set_bucket_encryption funcionando igual).
+    image: bitnamilegacy/minio@sha256:451fe6858cb770cc9d0e77ba811ce287420f781c7c1b806a386f6896471a349c
     environment:
       # Parametrizado (repositorio público) — ver .env.example en la raíz.
+      # MINIO_ROOT_USER es un identificador, no un secreto — default de
+      # desarrollo. MINIO_ROOT_PASSWORD y MINIO_KMS_SECRET_KEY sí son
+      # secretos reales: revisión de seguridad módulo Auth, hallazgo 3 —
+      # antes tenían fallback hardcodeado (la clave KMS, además, es una
+      # clave real publicada en este mismo repo). `${VAR:?mensaje}` evita
+      # que un despliegue sin .env arranque en silencio con esos valores de
+      # ejemplo — crea un .env en la raíz (ver .env.example).
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-labsync}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-labsync123}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Definí MINIO_ROOT_PASSWORD en un .env en la raíz (ver .env.example) — no hay fallback de desarrollo para un secreto real.}
       # Clave maestra local para cifrado en reposo (SSE-S3) de los buckets
       # de documentos/evidencias — ver docs/16-seguridad.md sección 5. Modo
       # de clave estática integrado de MinIO (sin KES/Vault externo); en un
-      # despliegue real esta clave vendría de un secret manager, no del
-      # propio compose (igual convención de dev-local que MINIO_ROOT_PASSWORD).
-      MINIO_KMS_SECRET_KEY: "${MINIO_KMS_SECRET_KEY:-labsync-master-key:w09R7021SABtUCVnFUVbShEhWfn2ONiWmFbD0ruskaw=}"
+      # despliegue real esta clave vendría de un secret manager, no de un
+      # .env local.
+      MINIO_KMS_SECRET_KEY: "${MINIO_KMS_SECRET_KEY:?Definí MINIO_KMS_SECRET_KEY en un .env en la raíz (ver .env.example) — no hay fallback de desarrollo para un secreto real.}"
     ports:
       - "9000:9000"
       - "9001:9001"

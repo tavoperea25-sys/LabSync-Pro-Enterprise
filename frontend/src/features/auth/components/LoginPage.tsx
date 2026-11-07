@@ -41,9 +41,9 @@ const itemVariants: Variants = {
 };
 
 const esquemaLogin = z.object({
-  laboratorio_slug: z.string().min(1, "Ingresa el identificador de tu laboratorio."),
-  correo: z.string().email("Ingresa un correo válido."),
-  password: z.string().min(1, "Por favor ingresa tu contraseña."),
+  laboratorio_slug: z.string().min(1, { error: "Ingresa el identificador de tu laboratorio." }),
+  correo: z.email({ error: "Ingresa un correo válido." }),
+  password: z.string().min(1, { error: "Por favor ingresa tu contraseña." }),
   recordarme: z.boolean(),
 });
 

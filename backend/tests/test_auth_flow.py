@@ -2,10 +2,22 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.config import get_settings
+from app.core.database import set_tenant_context
 from app.main import app
+from app.modules.auth.infrastructure.models import Usuario as UsuarioModel
+
+
+def _max_age_de_cookie_refresh(respuesta) -> int:
+    set_cookie = respuesta.headers.get("set-cookie", "")
+    coincidencia = re.search(r"Max-Age=(\d+)", set_cookie, re.IGNORECASE)
+    assert coincidencia, f"No se encontró Max-Age en el Set-Cookie: {set_cookie!r}"
+    return int(coincidencia.group(1))
 
 
 @pytest.fixture
@@ -62,7 +74,16 @@ def test_me_sin_token_devuelve_401(client: TestClient):
     assert respuesta.status_code == 401
 
 
-def test_flujo_completo_login_me_refresh_logout(client: TestClient, crear_laboratorio_con_admin):
+def test_flujo_completo_login_me_refresh_logout(client: TestClient, crear_laboratorio_con_admin, monkeypatch):
+    # Revisión de seguridad módulo Auth, hallazgo 1 — AuthService.refresh
+    # ahora tolera el reuso de un refresh token ya rotado dentro de una
+    # ventana de gracia corta (carrera benigna de refresh concurrente, no
+    # robo). Esta prueba simula un reuso genuino (sin ninguna concurrencia
+    # real de por medio) para confirmar que la detección de robo sigue
+    # funcionando — se fija la ventana a 0 para aislar justamente ese caso
+    # del de la ventana de gracia, que tiene su propia prueba dedicada en
+    # test_auth_refresh_concurrente.py.
+    monkeypatch.setattr(get_settings(), "refresh_ventana_gracia_segundos", 0)
     _, _, correo, password = crear_laboratorio_con_admin("Lab Flow", "lab-flow", "user@lab-flow.dev")
 
     login = client.post(
@@ -115,3 +136,110 @@ def test_bloqueo_progresivo_tras_intentos_fallidos(client: TestClient, crear_lab
 
     assert respuesta.status_code == 429
     assert respuesta.json()["error"]["codigo"] == "cuenta_bloqueada"
+
+
+def test_recordarme_propaga_duracion_a_sesion_y_sobrevive_refresh(
+    client: TestClient, crear_laboratorio_con_admin
+):
+    """Hallazgo 2 — antes, "Recordarme" solo cambiaba la cookie del login
+    (30 días) pero la sesión en base de datos quedaba fija en 7 días, y el
+    primer refresh volvía a fijar la cookie en 7 días sin importar la
+    preferencia original."""
+    _, _, correo, password = crear_laboratorio_con_admin(
+        "Lab Recordarme", "lab-recordarme", "user@lab-recordarme.dev"
+    )
+    dias_recordarme = get_settings().refresh_recordarme_dias
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={
+            "laboratorio_slug": "lab-recordarme",
+            "correo": correo,
+            "password": password,
+            "recordarme": True,
+        },
+    )
+    assert login.status_code == 200
+    assert _max_age_de_cookie_refresh(login) == dias_recordarme * 24 * 60 * 60
+
+    refresh = client.post("/api/v1/auth/refresh")
+    assert refresh.status_code == 200
+    assert _max_age_de_cookie_refresh(refresh) == dias_recordarme * 24 * 60 * 60
+
+
+def test_login_correo_inexistente_ejecuta_verificacion_ficticia(
+    client: TestClient, crear_laboratorio_con_admin, monkeypatch
+):
+    """Hallazgo 4 — antes, con un correo inexistente, `login` retornaba sin
+    llamar nunca a `verificar_password` (Argon2id), a diferencia de la rama
+    de contraseña incorrecta (correo sí existe) que sí lo hacía — una
+    asimetría de tiempo de respuesta que permite enumerar correos."""
+    crear_laboratorio_con_admin("Lab Enum", "lab-enum", "existe@lab-enum.dev")
+
+    from app.modules.auth.application import auth_service as auth_service_module
+
+    llamadas = []
+    original = auth_service_module.verificar_password
+
+    def _espia(password_plano, password_hash):
+        llamadas.append(password_hash)
+        return original(password_plano, password_hash)
+
+    monkeypatch.setattr(auth_service_module, "verificar_password", _espia)
+
+    respuesta = client.post(
+        "/api/v1/auth/login",
+        json={"laboratorio_slug": "lab-enum", "correo": "no-existe@lab-enum.dev", "password": "cualquiera"},
+    )
+
+    assert respuesta.status_code == 401
+    assert respuesta.json()["error"]["codigo"] == "credenciales_invalidas"
+    # Se verificó contra el hash ficticio precalculado, no se omitió la
+    # verificación — mismo costo de Argon2id que la rama de contraseña
+    # incorrecta.
+    assert llamadas == [auth_service_module._HASH_FICTICIO]
+
+
+def test_bloqueo_progresivo_respeta_el_techo_configurado(
+    client: TestClient, crear_laboratorio_con_admin, db, monkeypatch
+):
+    """Hallazgo 5 — sin techo, el bloqueo duplica sin límite en cada
+    intento fallido adicional (a los 20 intentos supera las 500 horas).
+    Simula un usuario que ya acumuló 8 intentos fallidos previos (sin
+    bloqueo activo) para que el próximo (9º, ciclos_de_bloqueo=5) caiga en
+    60*2^4=960s sin techo — muy por encima del límite fijado abajo. No se
+    puede llegar a este estado disparando 9 logins fallidos seguidos: tras
+    el 5º el login ya responde 429 sin volver a registrar el intento."""
+    monkeypatch.setattr(get_settings(), "bloqueo_maximo_segundos", 90)
+    laboratorio_id, usuario_id, correo, _ = crear_laboratorio_con_admin(
+        "Lab Techo", "lab-techo", "user@lab-techo.dev"
+    )
+    # `crear_laboratorio_con_admin` ya hizo `db.commit()` internamente, lo
+    # que revierte el `SET LOCAL` de `set_tenant_context` (ver
+    # app/core/database.py) — hay que volver a fijarlo antes de tocar `db`
+    # directamente, mismo patrón que el resto de la suite (p. ej.
+    # test_alertas_isolation.py).
+    set_tenant_context(db, laboratorio_id)
+    db.query(UsuarioModel).filter_by(id=usuario_id).update(
+        {"intentos_fallidos": 8, "bloqueado_hasta": None}
+    )
+    db.commit()
+
+    # Este 9º intento fallido es el que calcula y persiste el nuevo
+    # `bloqueado_hasta` (capado) — la respuesta a ESTE intento sigue siendo
+    # `credenciales_invalidas` (401), el bloqueo recién se aplica al
+    # siguiente intento.
+    noveno_intento = client.post(
+        "/api/v1/auth/login",
+        json={"laboratorio_slug": "lab-techo", "correo": correo, "password": "incorrecta"},
+    )
+    assert noveno_intento.status_code == 401
+
+    respuesta = client.post(
+        "/api/v1/auth/login",
+        json={"laboratorio_slug": "lab-techo", "correo": correo, "password": "incorrecta"},
+    )
+
+    assert respuesta.status_code == 429
+    segundos_restantes = respuesta.json()["error"]["detalles"]["segundos_restantes"]
+    assert segundos_restantes <= 90
