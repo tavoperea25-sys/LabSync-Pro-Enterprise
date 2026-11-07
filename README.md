@@ -133,6 +133,18 @@ docker compose up --build
 
 Levanta los 5 servicios. Frontend en `http://localhost:5173`, API en `http://localhost:8000`, consola de MinIO en `http://localhost:9001`. El backend auto-genera un par de llaves JWT de desarrollo en `backend/.keys/` si no existen — no requiere pasos manuales adicionales.
 
+#### Si ya tenías el volumen de MinIO de antes de 2026-11-06
+
+`docker-compose.yml` corre el servicio `minio` con la imagen `bitnamilegacy/minio` (ver el comentario junto a `image:` en ese archivo) en vez de la oficial `minio/minio`, eliminada de Docker Hub. Esta imagen corre como UID 1001 por defecto — si tu volumen `labsync_minio_data` ya existía (creado por `minio/minio`, dueño `root`), el contenedor nuevo no podrá escribirlo y vas a ver `FATAL Unable to initialize backend: file access denied` en `docker logs <proyecto>-minio-1`. Se arregla una sola vez, sin tocar los datos:
+
+```bash
+docker compose stop minio
+docker run --rm -v <proyecto>_labsync_minio_data:/data busybox chown -R 1001:0 /data
+docker compose up -d minio
+```
+
+(`<proyecto>` es el nombre del directorio del repositorio — Docker Compose lo usa como prefijo del volumen; confirmalo con `docker volume ls`). Verificá que no perdiste nada comparando la cantidad de objetos de cada bucket antes y después (consola de MinIO en `http://localhost:9001`, o `mc ls --recursive local/<bucket> | wc -l`).
+
 ### Sin Docker
 
 Ver las instrucciones detalladas en [`backend/README.md`](backend/README.md#desarrollo-local-sin-docker) y [`frontend/README.md`](frontend/README.md#desarrollo-sin-docker).
