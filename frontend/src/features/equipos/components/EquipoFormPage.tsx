@@ -18,8 +18,8 @@ import { useActualizarEquipo, useAreas, useCategorias, useCrearEquipo, useEquipo
 import { ESTADOS_OPERATIVOS, ETIQUETAS_ESTADO } from "../types";
 
 const esquemaEquipo = z.object({
-  codigo_interno: z.string().min(1, "El código interno es obligatorio.").max(50),
-  nombre: z.string().min(1, "El nombre es obligatorio.").max(200),
+  codigo_interno: z.string().min(1, { error: "El código interno es obligatorio." }).max(50),
+  nombre: z.string().min(1, { error: "El nombre es obligatorio." }).max(200),
   estado_operativo: z.enum(ESTADOS_OPERATIVOS),
   categoria_id: z.string().optional(),
   area_id: z.string().optional(),
