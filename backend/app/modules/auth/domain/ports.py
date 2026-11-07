@@ -104,13 +104,24 @@ class SesionRepository(Protocol):
         laboratorio_id: uuid.UUID,
         refresh_token_hash: str,
         expira_en: datetime,
+        duracion_dias: int,
         ip_origen: str | None,
         user_agent: str | None,
     ) -> SesionActiva: ...
 
     def buscar_por_hash(self, refresh_token_hash: str) -> SesionActiva | None: ...
 
+    def buscar_por_hash_para_refresh(self, refresh_token_hash: str) -> SesionActiva | None:
+        """Como `buscar_por_hash`, con `SELECT ... FOR UPDATE` — solo para
+        la rotación de refresh (ver implementación SQLAlchemy)."""
+        ...
+
     def revocar(self, sesion_id: uuid.UUID) -> None: ...
+
+    def revocar_por_rotacion(self, sesion_id: uuid.UUID) -> None:
+        """Como `revocar`, pero además marca `revocada_en` (ventana de
+        gracia) — solo para la rotación normal de refresh."""
+        ...
 
     def revocar_todas_de_usuario(self, usuario_id: uuid.UUID) -> None: ...
 
