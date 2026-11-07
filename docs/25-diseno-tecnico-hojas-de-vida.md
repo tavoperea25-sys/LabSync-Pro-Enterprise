@@ -119,7 +119,7 @@ fase de entrega (sección 5 de la especificación) para que cada PR traiga sus p
 | 0021 | `cronograma_metrologico` | 3 | Ver **[CORRECCIÓN PROPUESTA]** en sección 3.3: tabla reducida, sin fechas cacheadas. |
 | 0022 | `equipo_novedades` | 3 | Tabla simple: `equipo_id`, `tipo` (falla/traslado/cambio_estado/baja), `descripcion`, `responsable_id`, `creado_en`. |
 | 0023 | `adjuntos_hoja_vida_escaneada` | 3 | `ALTER` del `CHECK ck_adjuntos_entidad_tipo` para agregar `'equipo_hoja_vida_escaneada'` (drop + recreate, mismo patrón que si se agregara un valor a cualquier `CHECK` de dominio cerrado). |
-| 0024 | `mantenimientos_estado_documento` | 4 | Agrega a `mantenimientos`: `estado_documento`, `falla_reportada`, `actividades_realizadas`, `comentarios`, `resultado`, `recomendaciones`, `estado_final_equipo`, `anulado_en`, `anulado_por`, `motivo_anulacion`, `reemplaza_a_id`, `consecutivo`, y **[REVISIÓN 2]** `snapshot_congelado JSONB NULL` (el contenido queda congelado desde la primera firma — sección 5.3, no desde la última). `CHECK ck_mantenimientos_estado_documento`. **Además** extiende `ck_mantenimientos_tipo` con `'calificacion'` y `'verificacion_interna'` (decidido, sección 4.1/7). |
+| 0024 | `mantenimientos_estado_documento` | 4 | Agrega a `mantenimientos`: `estado_documento`, `falla_reportada`, `actividades_realizadas`, `comentarios`, `resultado`, `recomendaciones`, `estado_final_equipo`, `anulado_en`, `anulado_por`, `motivo_anulacion`, `reemplaza_a_id`, `consecutivo`, y **[REVISIÓN 2]** `snapshot_congelado JSONB NULL` (el contenido queda congelado desde la primera firma — sección 5.3, no desde la última). `CHECK ck_mantenimientos_estado_documento`. **[REVISIÓN 2 — condicional]** Extiende `ck_mantenimientos_tipo` con `'calificacion'` y `'verificacion_interna'` **solo si Gustavo aprueba la opción A de la sección 4.1/7**; si decide la opción B, esta migración no toca `ck_mantenimientos_tipo` y las tablas `calificaciones`/`verificaciones_internas` se planean por separado. |
 | 0025 | `plantillas_checklist` | 4 | `plantillas_checklist`, `plantilla_checklist_items`, `mantenimiento_checklist`. |
 | 0026 | `mantenimiento_repuestos_evidencias` | 4 | `mantenimiento_repuestos`; `mantenimiento_evidencias` (FK a `adjuntos.id` + columna `momento`, en vez de duplicar columnas de archivo — ver sección 2.1). Migra `repuestos_utilizados` texto a filas de `mantenimiento_repuestos` (best-effort, sin borrar el texto original). |
 | 0027 | `firmas` | 5 | Tabla `firmas` (incluye **[REVISIÓN 2]** `hash_contenido` — hash del `snapshot_congelado` en el momento de esa firma, sección 5.3 — y `descartada_en`/`descartada_por_id`, mismo patrón que `anulado_en`/`eliminado_en` ya usado en el proyecto, para el flujo "volver a borrador" de la sección 5.3; único índice único parcial `(documento_tipo, documento_id, rol) WHERE descartada_en IS NULL`, mismo criterio que `uq_alertas_activa_por_origen` de la migración 0007) + triggers de inmutabilidad (sección 5.4, con manejo explícito de `DELETE`). |
@@ -261,29 +261,44 @@ columnas `MTTO PREVENTIVO | MTTO CORRECTIVO | CALIB | CALIF | VERIFICACION INTER
 realizada", "realizado por" y "supervisado por". Son conceptualmente **el mismo tipo de evento** (una
 intervención con fecha, responsable y resultado) con un `tipo` distinto.
 
-**[REVISIÓN 2 — decisión, el punto que Gustavo dejó para esta revisión]:** `calificación` y `verificación
-interna` no tienen tabla propia hoy ni la propone la especificación en su sección 4. Se decide tratarlas como
-**valores adicionales de `mantenimientos.tipo`** (junto a `preventivo`/`correctivo`/`predictivo`/
-`calibracion_correctiva`), no como tablas nuevas. Motivos:
+**[REVISIÓN 2 — PENDIENTE DE DECISIÓN DE GUSTAVO.]** La revisión anterior de este documento marcó este punto
+como decidido por error: el marcador que el prompt dejó explícitamente para que Gustavo escribiera su
+decisión (`[ESCRIBE AQUÍ TU DECISIÓN]`) quedó sin llenar, y no correspondía completarlo por cuenta propia.
+Queda como pregunta abierta. `calificación` y `verificación interna` no tienen tabla propia hoy ni la propone
+la especificación en su sección 4. Hay al menos dos opciones:
+
+**Opción A (propuesta, no decidida) — valores adicionales de `mantenimientos.tipo`** (junto a
+`preventivo`/`correctivo`/`predictivo`/`calibracion_correctiva`), no tablas nuevas. A favor:
 
 - Tienen exactamente la misma forma que un mantenimiento (fecha, equipo, técnico responsable, descripción,
-  resultado, y ahora también el mismo ciclo de firma de la sección 5) — crear dos tablas nuevas solo para
-  estos dos tipos duplicaría toda la infraestructura de checklist/repuestos/evidencias/firmas sin necesidad
-  real.
+  resultado) — crear dos tablas nuevas solo para estos dos tipos duplicaría toda la infraestructura de
+  checklist/repuestos/evidencias/firmas sin necesidad real.
 - Mantiene el historial unificado como una unión de solo **dos** fuentes (`mantenimientos` ∪ `calibraciones`),
   en vez de cuatro — menos superficie para que el historial se desincronice (principio de la sección 3.3 de
   la especificación).
 - Es reversible sin romper nada: si en producción `calificación`/`verificación interna` resultan necesitar
-  campos propios muy distintos de un mantenimiento (por ejemplo, un patrón de referencia o una norma técnica
-  específica que no aplica a `preventivo`/`correctivo`), se pueden separar más adelante a tablas propias sin
+  campos propios muy distintos de un mantenimiento, se pueden separar más adelante a tablas propias sin
   afectar lo ya construido — el historial seguiría funcionando agregando un `UNION ALL` más a la vista.
-- El riesgo real es que un reporte de calificación/verificación acabe con columnas de `mantenimientos` que no
-  le aplican (`repuestos`, `tiempo_inactividad_horas`) quedando siempre vacías — se acepta ese costo menor a
-  cambio de no duplicar infraestructura; ninguna de esas columnas es `NOT NULL`, así que no fuerza datos
-  inventados (consistente con la sección 3.8 de la especificación).
 
-Con esta decisión, el historial unificado solo necesita combinar **dos** fuentes: `mantenimientos` (ya cubre
-preventivo/correctivo/calificación/verificación) y `calibraciones`.
+**Contraargumento real contra la opción A [REVISIÓN 2]:** con el ciclo de firma de la sección 5 tal como
+está diseñado, cualquier fila de `mantenimientos` que llega a `pendiente_firmas`/`firmado` genera un PDF
+**FOR-005** ("Reporte de mantenimiento de equipos", sección 5.3). Una calificación o una verificación interna
+no son un mantenimiento y **no deberían terminar en un documento que se titula "Reporte de mantenimiento"**
+— sería un PDF con el formato, código y versión equivocados para lo que realmente ocurrió. Resolver esto
+dentro de la opción A exigiría, como mínimo, que `documentos_generados.tipo` (y la plantilla fpdf2 que elige
+el generador) dependan de `mantenimientos.tipo` y no solo de "es un mantenimiento", además de un código de
+formato propio para calificación/verificación que la especificación tampoco define hoy — trabajo adicional
+no trivial que la opción A, como estaba redactada, no contemplaba.
+
+**Opción B (alternativa) — tablas separadas** `calificaciones`/`verificaciones_internas`, con su propio ciclo
+de firma y su propio tipo de documento generado (p. ej. `documentos_generados.tipo IN ('FOR-003','FOR-005',
+'calificacion','verificacion_interna')`, cada una con su propio código/versión de formato en
+`configuraciones_laboratorio.versiones_formato_json`). Más infraestructura nueva, pero evita el problema del
+PDF con el formato equivocado y no fuerza columnas de `mantenimientos` que no aplican.
+
+Hasta que Gustavo decida, el resto de este documento (la vista de la sección 4.2, las migraciones de la
+sección 2) se escribe asumiendo la **opción A** solo como referencia de diseño — no como algo ya aprobado —
+y debe revisarse si la decisión final es la opción B.
 
 ### 4.2 La vista
 
@@ -549,16 +564,23 @@ al completarse las firmas (5.3b) — ahí el trigger es más simple porque no ha
 permitir: bloquea **todo** `UPDATE` y **todo** `DELETE` sin excepción, siempre con la misma distinción
 explícita de `TG_OP` (nunca `RETURN NEW` dentro de la rama de `DELETE`).
 
-**[REVISIÓN 2]** Nota operativa para quien escriba estas migraciones: cualquier migración **posterior** que
-haga un `UPDATE` masivo sobre `mantenimientos` (un backfill, una corrección de datos) va a chocar con este
-trigger para toda fila con `estado_documento <> 'borrador'`. Antes de este desarrollo todas las filas
-existentes tienen `estado_documento = 'borrador'` por defecto (columna nueva), así que una migración de
-backfill que corra *antes* de que exista cualquier firma no tiene problema — pero cualquier migración de
-datos escrita *después* de que el sistema lleve tiempo en producción con reportes firmados debe, o bien
-filtrar explícitamente `WHERE estado_documento = 'borrador'`, o bien envolver el `UPDATE` entre
-`ALTER TABLE mantenimientos DISABLE TRIGGER trg_mantenimientos_inmutable;` ... `ENABLE TRIGGER ...;` dentro de
-la misma migración, documentando por qué es seguro saltarse la protección en ese caso puntual. Vale lo mismo
-para `firmas` y `documentos_generados`.
+**[REVISIÓN 2, ajustada]** Nota operativa para quien escriba estas migraciones: cualquier migración
+**posterior** que haga un `UPDATE` masivo sobre `mantenimientos` (un backfill, una corrección de datos) va a
+chocar con este trigger para toda fila con `estado_documento <> 'borrador'`. Antes de este desarrollo todas
+las filas existentes tienen `estado_documento = 'borrador'` por defecto (columna nueva), así que una
+migración de backfill que corra *antes* de que exista cualquier firma no tiene problema. Cualquier migración
+de datos escrita *después* de que el sistema lleve tiempo en producción con reportes firmados **debe filtrar
+explícitamente `WHERE estado_documento = 'borrador'`** y dejar fuera del `UPDATE` cualquier fila que ya no
+esté en borrador.
+
+**Regla sin excepciones (se elimina la alternativa de la revisión anterior):** está **prohibido** desactivar
+el trigger (`ALTER TABLE ... DISABLE TRIGGER`) sobre `firmas` o `documentos_generados`, bajo cualquier
+circunstancia — esas dos tablas no tienen ninguna transición de "corrección de datos" legítima una vez
+creada la fila, así que no existe un caso válido para saltarse la protección. Sobre `mantenimientos`, tampoco
+se desactiva el trigger: si una migración necesitara tocar una fila con `estado_documento <> 'borrador'`, eso
+significa que el dato está mal pensado, no que el trigger esté de más. **Un dato erróneo en un reporte ya
+`firmado` se corrige únicamente por el camino de negocio (anular + reemplazar, sección 5.1), nunca editando
+la fila directamente** — ni por servicio, ni por una migración, ni por acceso directo a la base de datos.
 
 Es la primera vez que el proyecto introduce triggers de PL/pgSQL (junto con la vista de la sección 4.2) —
 vale la pena que el PR de la Fase 5 incluya un test específico que intente `UPDATE` y `DELETE` directos por
@@ -732,11 +754,11 @@ en modo de solo lectura (ya no hay botón "editar").
    que nadie intente reutilizar `reportes_generados` para esto en la Fase 5.
 3. **No existe `calificaciones` ni `verificaciones_internas` como tabla, y la especificación tampoco las
    modela en su sección 4**, pese a que la sección 3.3 y la hoja `MTTO` del FOR-003 las mencionan como
-   columnas propias. **[REVISIÓN 2 — decisión tomada, sección 4.1]:** se extiende `mantenimientos.tipo` con
-   `'calificacion'` y `'verificacion_interna'` en vez de crear dos tablas nuevas, con la justificación
-   completa en la sección 4.1. Es una desviación real de la especificación tal como está escrita (que no
-   menciona esta extensión del enum), pero queda decidida para esta Fase 1; si en producción resulta
-   insuficiente, es reversible sin romper el historial (sección 4.1 explica por qué).
+   columnas propias. **[REVISIÓN 2 — PENDIENTE DE DECISIÓN DE GUSTAVO]** (ver sección 4.1 completa): opción A
+   (propuesta) es extender `mantenimientos.tipo` con `'calificacion'`/`'verificacion_interna'`, reutilizando
+   toda la infraestructura existente; en contra, el ciclo de firma actual generaría para ellas un PDF
+   **FOR-005** ("Reporte de mantenimiento"), que no es el formato que les corresponde. Opción B es modelarlas
+   como tablas propias con su propio tipo de documento generado. Ninguna de las dos está decidida todavía.
 4. **`equipo_manuales` y el manual único existente.** `equipos.manual_object_key` no registra qué *tipo* de
    manual es. **[REVISIÓN 2 — decidido]:** la migración 0020 migra con `tipo='sin_clasificar'` (valor nuevo en
    el `CHECK` de `equipo_manuales.tipo`), sin asumir "operación" ni ningún otro tipo concreto — el usuario lo
@@ -792,13 +814,19 @@ en modo de solo lectura (ya no hay botón "editar").
 
 ## 8. Resumen de lo que requiere aprobación antes de la Fase 2
 
-**[REVISIÓN 2]** Los 5 puntos de la ronda anterior quedaron resueltos con las decisiones de esta revisión
-(nombre del endpoint de historial, extender `mantenimientos.tipo`, manual existente a `'sin_clasificar'`,
-cronograma sin fechas cacheadas con el fallback corregido, y `supervisa` siempre opcional). Lo único
-pendiente de esta ronda es que Gustavo confirme que los 5 cambios marcados **[REVISIÓN 2]** en el cuerpo del
-documento (congelamiento desde la primera firma con el flujo "volver a borrador", `security_invoker` en la
-vista, columna `corregido` separada de `anulado`, manejo de `DELETE` en el trigger, y el fallback de
-frecuencia por tipo de actividad) quedaron bien resueltos.
+**[REVISIÓN 2, ajustada]** Sigue pendiente de decisión de Gustavo:
+
+- **Calificación y verificación interna** (sección 4.1/7, punto 3): opción A (extender `mantenimientos.tipo`,
+  con el contraargumento del PDF FOR-005 incorrecto) vs. opción B (tablas propias). La migración 0024 y la
+  vista de la sección 4.2 están escritas asumiendo la opción A solo como referencia, no como decisión.
+
+El resto de los 5 puntos de la ronda anterior quedaron resueltos (nombre del endpoint de historial, manual
+existente a `'sin_clasificar'`, cronograma sin fechas cacheadas con el fallback corregido, y `supervisa`
+siempre opcional). Falta que Gustavo confirme que los demás cambios marcados **[REVISIÓN 2]** en el cuerpo
+del documento (congelamiento desde la primera firma con el flujo "volver a borrador", la regla sin
+excepciones sobre `DISABLE TRIGGER`, `security_invoker` en la vista, columna `corregido` separada de
+`anulado`, manejo de `DELETE` en el trigger, y el fallback de frecuencia por tipo de actividad) quedaron bien
+resueltos.
 
 Puntos menores que no bloquean, para resolver durante la implementación:
 - A qué roles del sistema de permisos se les otorga `mantenimientos.firmar`, y si "volver a borrador"
