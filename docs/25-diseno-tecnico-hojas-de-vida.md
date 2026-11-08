@@ -18,6 +18,12 @@
 > (opción C: van en el módulo de Calibraciones, no en Mantenimientos ni en tablas nuevas) y pidió modelar los
 > mantenimientos ejecutados por un proveedor externo (sin FOR-005 ni firmas, solo su informe con hash). Cada
 > cambio de esta ronda está marcado **[REVISIÓN 3]**.
+>
+> **[REVISIÓN 4]** Gustavo decidió la última pregunta abierta: el hash de integridad de un informe o
+> certificado lo calcula el **backend** (leyendo el archivo por streaming y validando sus magic bytes), nunca
+> el cliente — un hash calculado por quien sube el archivo no es evidencia de integridad frente a ese mismo
+> archivo. Con esta decisión no queda ninguna decisión de diseño pendiente (sección 8). Cada cambio de esta
+> ronda está marcado **[REVISIÓN 4]**.
 
 ---
 
@@ -78,7 +84,7 @@ motivos en la sección 4.1.
 |---|---|---|
 | `Documento`/`VersionDocumento` | [documentos/infrastructure/models.py](../backend/app/modules/documentos/infrastructure/models.py) | Gestor documental de **documentos de calidad del laboratorio** (SOP, formatos, etc.): carpetas, versiones, estado `vigente/obsoleto/en_revision`, aprobación, papelera con retención configurable. **No tiene `equipo_id`** — no está pensado para colgar un archivo de un equipo puntual. |
 | `Adjunto` (modelo) | [adjuntos/infrastructure/models.py](../backend/app/modules/adjuntos/infrastructure/models.py) | Tabla polimórfica genérica: `entidad_tipo` + `entidad_id` + `object_key`. **Ya es el mecanismo real para "colgar un archivo de una entidad arbitraria"**, pero `entidad_tipo` tiene un `CHECK` cerrado desde la migración 0016: `('mantenimiento_evidencia', 'mantenimiento_informe', 'calibracion_certificado')`. Para "hoja de vida física escaneada" y las nuevas evidencias con "momento", este `CHECK` debe extenderse (sección 2). |
-| `AlmacenamientoPort` | [documentos/domain/ports.py](../backend/app/modules/documentos/domain/ports.py) | Contrato MinIO compartido: `url_subida`, `url_descarga`, `url_vista_previa`, `copiar_objeto`, `eliminar_objeto`. El backend **nunca** transporta el binario — firma URLs y el frontend sube/baja directo a MinIO. Los nuevos flujos (snapshot PDF, firmas) deben seguir este mismo contrato. |
+| `AlmacenamientoPort` | [documentos/domain/ports.py](../backend/app/modules/documentos/domain/ports.py) | Contrato MinIO compartido: `url_subida`, `url_descarga`, `url_vista_previa`, `copiar_objeto`, `eliminar_objeto`. El backend **nunca** transporta el binario *hacia o desde el navegador* — firma URLs y el frontend sube/baja directo a MinIO. **[REVISIÓN 4]** Este principio no cambia para subida/descarga; sí se agrega una lectura server-a-server puntual (sección 3.4/4.1) para hashear y validar archivos ya subidos — nunca para servirlos de vuelta al cliente. |
 
 ### 1.5 Reportes (PDF existentes)
 
@@ -126,9 +132,9 @@ fase de entrega (sección 5 de la especificación) para que cada PR traiga sus p
 | 0021 | `cronograma_metrologico` | 3 | Ver **[CORRECCIÓN PROPUESTA]** en sección 3.3: tabla reducida, sin fechas cacheadas. |
 | 0022 | `equipo_novedades` | 3 | Tabla simple: `equipo_id`, `tipo` (falla/traslado/cambio_estado/baja), `descripcion`, `responsable_id`, `creado_en`. |
 | 0023 | `adjuntos_hoja_vida_escaneada` | 3 | `ALTER` del `CHECK ck_adjuntos_entidad_tipo` para agregar `'equipo_hoja_vida_escaneada'` (drop + recreate, mismo patrón que si se agregara un valor a cualquier `CHECK` de dominio cerrado). |
-| 0024 | **[REVISIÓN 3 — nueva]** `calibraciones_tipo_ejecutor` | 3 | Agrega a `calibraciones`: `tipo CHECK IN ('calibracion','calificacion','verificacion_interna') NOT NULL DEFAULT 'calibracion'` (backfill: todas las filas existentes son `'calibracion'`, es lo único que hay hoy); `ejecutor_tipo CHECK IN ('interno','externo') NOT NULL`; `criterio_aceptacion TEXT NULL` (solo tiene sentido para `verificacion_interna`, nunca obligatorio). `CHECK (ejecutor_tipo = 'interno' OR laboratorio_proveedor IS NOT NULL)` — un ejecutor externo siempre debe decir qué proveedor la hizo. Backfill de `ejecutor_tipo`: `'externo'` si `laboratorio_proveedor IS NOT NULL`, si no `'interno'` — ver riesgo en sección 7 (puede haber calibraciones viejas sin `laboratorio_proveedor` diligenciado que en realidad fueron externas). Detalle completo en sección 4.1. |
+| 0024 | **[REVISIÓN 3/4]** `calibraciones_tipo_ejecutor` | 3 | Agrega a `calibraciones`: `tipo CHECK IN ('calibracion','calificacion','verificacion_interna') NOT NULL DEFAULT 'calibracion'` (backfill: todas las filas existentes son `'calibracion'`, es lo único que hay hoy); `ejecutor_tipo CHECK IN ('interno','externo') NOT NULL`; `criterio_aceptacion TEXT NULL` (solo tiene sentido para `verificacion_interna`, nunca obligatorio); **[REVISIÓN 4]** `certificado_hash_sha256 TEXT NULL` (calculado por el backend al registrar la fila, solo si hay `certificado_adjunto_id` — sección 3.4/4.1, mismo mecanismo que `mantenimientos.informe_hash_sha256`). `CHECK (ejecutor_tipo = 'interno' OR laboratorio_proveedor IS NOT NULL)` — un ejecutor externo siempre debe decir qué proveedor la hizo. Backfill de `ejecutor_tipo`: `'externo'` si `laboratorio_proveedor IS NOT NULL`, si no `'interno'` — ver riesgo en sección 7 (puede haber calibraciones viejas sin `laboratorio_proveedor` diligenciado que en realidad fueron externas). Detalle completo en sección 4.1. |
 | 0025 | `mantenimientos_estado_documento` | 4 | Agrega a `mantenimientos`: `estado_documento` (ahora **nullable** — sección 3.4), `falla_reportada`, `actividades_realizadas`, `comentarios`, `resultado`, `recomendaciones`, `estado_final_equipo`, `anulado_en`, `anulado_por`, `motivo_anulacion`, `reemplaza_a_id`, `consecutivo`, `snapshot_congelado JSONB NULL` (el contenido queda congelado desde la primera firma — sección 5.3, no desde la última). `CHECK ck_mantenimientos_estado_documento`. **[REVISIÓN 3]** `ck_mantenimientos_tipo` **no se toca** — calificación/verificación interna van en `calibraciones` (migración 0024), no aquí. |
-| 0026 | **[REVISIÓN 3 — nueva]** `mantenimientos_ejecutor` | 4 | Agrega a `mantenimientos`: `ejecutor_tipo CHECK IN ('interno','externo') NOT NULL DEFAULT 'interno'` (backfill: todo lo existente como `'interno'` — riesgo en sección 7, no hay forma de distinguir con certeza los históricos); `proveedor_id FK proveedores.id NULL`; `informe_hash_sha256 TEXT NULL`. `CHECK (ejecutor_tipo = 'interno' OR proveedor_id IS NOT NULL)`. `CHECK ((ejecutor_tipo = 'interno') = (estado_documento IS NOT NULL))` — un mantenimiento externo nunca tiene `estado_documento`; uno interno siempre lo tiene (sección 3.4). |
+| 0026 | **[REVISIÓN 3/4]** `mantenimientos_ejecutor` | 4 | Agrega a `mantenimientos`: `ejecutor_tipo CHECK IN ('interno','externo') NOT NULL DEFAULT 'interno'` (backfill: todo lo existente como `'interno'` — riesgo en sección 7, no hay forma de distinguir con certeza los históricos); `proveedor_id FK proveedores.id NULL`; `informe_hash_sha256 TEXT NULL` (**[REVISIÓN 4]** calculado por el backend al cerrar, leyendo el informe desde MinIO por streaming — sección 3.4, nunca enviado por el cliente). `CHECK (ejecutor_tipo = 'interno' OR proveedor_id IS NOT NULL)`. `CHECK ((ejecutor_tipo = 'interno') = (estado_documento IS NOT NULL))` — un mantenimiento externo nunca tiene `estado_documento`; uno interno siempre lo tiene (sección 3.4). |
 | 0027 | `plantillas_checklist` | 4 | `plantillas_checklist`, `plantilla_checklist_items`, `mantenimiento_checklist` — **[REVISIÓN 3]** solo aplican a mantenimientos `ejecutor_tipo='interno'` (sección 3.4). |
 | 0028 | `mantenimiento_repuestos_evidencias` | 4 | `mantenimiento_repuestos`; `mantenimiento_evidencias` (FK a `adjuntos.id` + columna `momento`, en vez de duplicar columnas de archivo — ver sección 2.1). Migra `repuestos_utilizados` texto a filas de `mantenimiento_repuestos` (best-effort, sin borrar el texto original). |
 | 0029 | `firmas` | 5 | Tabla `firmas` (incluye `hash_contenido` — hash del `snapshot_congelado` en el momento de esa firma, sección 5.3 — y `descartada_en`/`descartada_por_id`, mismo patrón que `anulado_en`/`eliminado_en` ya usado en el proyecto, para el flujo "volver a borrador" de la sección 5.3; índice único parcial `(documento_tipo, documento_id, rol) WHERE descartada_en IS NULL`, mismo criterio que `uq_alertas_activa_por_origen` de la migración 0007) + triggers de inmutabilidad (sección 5.4, con manejo explícito de `DELETE`). **[REVISIÓN 3]** Solo existen firmas para mantenimientos `ejecutor_tipo='interno'` — nunca para externos ni para calibraciones/calificaciones/verificaciones. |
@@ -281,21 +287,44 @@ certificó por su cuenta:
 | Flujo | FOR-005 completo: checklist, repuestos, evidencias, firmas (sección 5), tal como está diseñado — **sin cambios**. | Sin FOR-005 ni firmas. Para `cerrar()` es **obligatorio** tener ya un informe adjunto (`informe_adjunto_id IS NOT NULL`, reutilizando `asignar_informe()` existente — sección 1.2, sin cambios en ese mecanismo). |
 | `estado_documento` | Sigue el ciclo completo `borrador → pendiente_firmas → firmado → anulado` (secciones 3.1 y 5). | **Siempre `NULL`** — no aplica, no hay documento que firmar. `CHECK ((ejecutor_tipo = 'interno') = (estado_documento IS NOT NULL))` en la migración 0026 lo refuerza en base de datos. |
 | Qué lo congela/vuelve inmutable | La primera firma (`estado_documento` pasa a `pendiente_firmas`, sección 5.3). | El propio `cerrar()`: al cerrar un mantenimiento externo con su informe ya adjunto, el registro completo (incluido el informe) queda inmutable de inmediato — no hace falta ninguna firma para que un informe de un tercero sea evidencia válida. |
-| Hash de integridad | `firmas.hash_contenido` + `documentos_generados.hash_sha256` del PDF que el propio sistema genera (sección 5.3). | `mantenimientos.informe_hash_sha256` (migración 0026) — hash del informe del proveedor, calculado al cerrar. |
+| Hash de integridad | `firmas.hash_contenido` + `documentos_generados.hash_sha256` del PDF que el propio sistema genera (sección 5.3). | `mantenimientos.informe_hash_sha256` (migración 0026) — hash del informe del proveedor, calculado por el **backend** al cerrar (ver más abajo). |
 | Corrección de un error | Anular (`estado_documento='anulado'`) + reemplazar (`reemplaza_a_id`), sección 5.1. | **Mismo mecanismo** — `anular_y_reemplazar()`/`POST /mantenimientos/{id}/anular` se generaliza para aceptar también un externo ya cerrado (su precondición deja de ser "`estado_documento=='firmado'`" y pasa a ser "está en el estado inmutable que le corresponda a su `ejecutor_tipo`", ver sección 5.1/5.4). |
 
-**¿Cómo se calcula `informe_hash_sha256` si el backend nunca transporta el binario del archivo (sección
-1.4)?** Es una tensión real con el principio del proyecto ("el backend firma URLs, nunca ve los bytes").
-Opción recomendada: el **frontend** calcula el hash con `crypto.subtle.digest("SHA-256", bytes)` (Web Crypto
-API, ya disponible en cualquier navegador moderno, sin dependencia nueva) justo después de subir el informe a
-MinIO, y lo envía como parte del payload de `cerrar()` — exactamente el mismo nivel de confianza que ya existe
-hoy para `tamano_bytes`/`tipo_mime` al pedir una URL de subida (`_solicitar_url` en
-`mantenimiento_service.py`, sección 1.2: esos valores también los reporta el cliente, no los verifica el
-backend contra el binario real). Alternativa más rigurosa pero más cara: que el backend lea una vez el objeto
-desde MinIO para hashearlo él mismo — requeriría agregar un método nuevo a `AlmacenamientoPort` (hoy no tiene
-ninguno que lea bytes, solo firma URLs y copia/borra objetos del lado del servidor) y sí rompería el
-principio de "nunca transporta el binario". Se recomienda la primera opción; queda para que Gustavo confirme
-en la Fase 4.
+**[REVISIÓN 4 — DECIDIDO POR GUSTAVO.] `informe_hash_sha256` lo calcula el backend, no el navegador.** Un
+hash de integridad calculado por el cliente no es evidencia: el sistema nunca lo verificó, así que no prueba
+nada frente a un cliente que miente o a un archivo corrupto en tránsito. Que hoy se confíe en
+`tamano_bytes`/`tipo_mime` reportados por el cliente (`_solicitar_url` en `mantenimiento_service.py`, sección
+1.2) es una debilidad **existente**, no un precedente a seguir — queda señalada aparte en el riesgo 21 de la
+sección 7, sin corregirla aquí (fuera de alcance de esta Fase 1).
+
+Al llamar `cerrar()` sobre un mantenimiento `externo` con su `informe_adjunto_id` ya asignado:
+
+1. El backend lee el objeto desde MinIO **por streaming** (`AlmacenamientoPort`, método nuevo — sección
+   4.1/7, riesgo 22 — recibe el `object_key` y entrega los bytes en fragmentos, nunca el archivo completo
+   en memoria de una sola vez; el cliente MinIO/S3 soporta esto de forma nativa).
+2. Mientras lee cada fragmento: acumula los primeros bytes (los *magic bytes* del formato — `%PDF` para PDF,
+   `\xFF\xD8\xFF` para JPG, `\x89PNG\r\n\x1a\n` para PNG) y alimenta un `hashlib.sha256()` incremental con
+   cada fragmento, sin tener que guardar el archivo completo para calcular el hash.
+3. Al terminar de leer: compara los magic bytes reales contra el `tipo_mime` que el `Adjunto` declaró al
+   subirse. Si no coinciden (alguien subió un `.exe` renombrado a `.pdf`, por ejemplo), **se rechaza el
+   cierre** con un error de dominio — el mantenimiento no se cierra, no queda inmutable, y no se guarda
+   ningún hash de un archivo que no es lo que dice ser.
+4. Si coinciden, `informe_hash_sha256 = hasher.hexdigest()` se guarda junto con la transición a inmutable
+   (mismo criterio transaccional que el congelamiento de la sección 5.3: todo en una sola operación).
+
+**Mismo criterio para los certificados/informes de `calibraciones`** (sección 4.1): se agrega
+`certificado_hash_sha256 TEXT NULL` a la migración 0024, calculado por el backend de la misma forma (lectura
+por streaming + magic bytes + hash incremental) dentro de `CalibracionService._crear_fila()`, justo después
+de registrar el `Adjunto` y antes de confirmar la fila de `Calibracion` — si el certificado no es lo que dice
+ser, tampoco se crea el registro de calibración/calificación/verificación.
+
+**Opción descartada: que el frontend calcule el hash con `crypto.subtle.digest("SHA-256", ...)` (Web Crypto
+API) y lo envíe al backend.** Es más simple de implementar (sin tocar `AlmacenamientoPort` ni leer bytes en
+el backend) y es lo que proponía la versión anterior de este documento, pero se descarta: un hash que el
+propio cliente calcula sobre su propio archivo no es una garantía de integridad frente a ese cliente — solo
+protegería contra una corrupción accidental después de que el backend ya confió en el valor reportado, no
+contra un cliente que miente a propósito. La validación de integridad real tiene que hacerla quien no tiene
+interés en mentir, es decir, el backend.
 
 ---
 
@@ -328,11 +357,15 @@ qué falta:
 | Quién la ejecutó (para distinguir interno/externo) | Parcial — `responsable_id` ya existe, `laboratorio_proveedor` (texto, opcional) ya existe, pero no hay una columna explícita que diga "interno" o "externo" | Falta `ejecutor_tipo` |
 | Criterio de aceptación (para verificación interna) | No existe | Falta `criterio_aceptacion` |
 | Certificado/informe adjunto | **Sí**, ya existe (`certificado_adjunto_id`, reutiliza `adjuntos`) | Sin cambios |
+| Hash de integridad del certificado (**[REVISIÓN 4]**) | No existe | Falta `certificado_hash_sha256`, calculado por el backend al registrar — mismo mecanismo que `mantenimientos.informe_hash_sha256` (sección 3.4) |
 | Corrección sin borrar | **Sí**, ya existe (`corrige_a_id`/`motivo_correccion`) | Sin cambios |
 
 Diseño (migración 0024, sección 2): se agrega `tipo` (como arriba), `ejecutor_tipo CHECK IN ('interno',
-'externo') NOT NULL`, y `criterio_aceptacion TEXT NULL` (solo se diligencia para `verificacion_interna`; nunca
-obligatorio, consistente con "ningún dato ficticio" — sección 3.8 de la especificación). Un `CHECK
+'externo') NOT NULL`, `criterio_aceptacion TEXT NULL` (solo se diligencia para `verificacion_interna`; nunca
+obligatorio, consistente con "ningún dato ficticio" — sección 3.8 de la especificación), y **[REVISIÓN 4]**
+`certificado_hash_sha256 TEXT NULL`, calculado por el backend dentro de `CalibracionService._crear_fila()`
+justo después de registrar el `Adjunto` del certificado (lectura por streaming + validación de magic bytes,
+mismo mecanismo que `mantenimientos.informe_hash_sha256` — sección 3.4). Un `CHECK
 (ejecutor_tipo = 'interno' OR laboratorio_proveedor IS NOT NULL)` refuerza en base de datos que un ejecutor
 externo siempre declare qué proveedor la hizo. **Ninguna de las tres (`calibracion`, `calificacion`,
 `verificacion_interna`) genera un PDF FOR-005** — ese formato es exclusivamente del módulo de Mantenimientos
@@ -971,36 +1004,48 @@ en modo de solo lectura (ya no hay botón "editar").
     evidencias diligenciadas, una señal débil, no una regla confiable. A diferencia del punto 17 (donde hay
     una señal razonable), aquí no se propone ninguna heurística automática: se migra todo como `'interno'` y
     se deja a Calidad la tarea de revisar y reclasificar los mantenimientos que en realidad fueron externos.
-19. **[REVISIÓN 3]** Cómo se calcula `mantenimientos.informe_hash_sha256` (sección 3.4) es una tensión real
-    con el principio de "el backend nunca transporta el binario" (sección 1.4): la opción recomendada es que
-    el **frontend** lo calcule con la Web Crypto API y lo envíe al cerrar, aceptando el mismo nivel de
-    confianza que ya existe hoy para `tamano_bytes`/`tipo_mime` reportados por el cliente al pedir una URL de
-    subida. La alternativa (que el backend lea el objeto de MinIO para hashearlo) es más rigurosa pero exige
-    un método nuevo en `AlmacenamientoPort` que hoy no existe y rompe ese principio — **pendiente de
-    confirmar con Gustavo en la Fase 4**, es la única decisión de este documento que sigue abierta (ver
-    sección 8).
+19. **[REVISIÓN 4 — decidido]** Cómo se calcula `mantenimientos.informe_hash_sha256`/`calibraciones.certificado_hash_sha256`
+    (sección 3.4/4.1): lo calcula el **backend**, leyendo el objeto desde MinIO por streaming y validando los
+    magic bytes contra el `tipo_mime` declarado — no el frontend. Un hash que calcula el propio cliente sobre
+    su propio archivo no es evidencia de integridad frente a ese cliente.
 20. **[REVISIÓN 3]** El endpoint `POST /mantenimientos/{id}/anular` (sección 5.1) ahora sirve para dos casos
     con reglas de inmutabilidad distintas (`interno` firmado vs. `externo` cerrado con informe) — el servicio
     necesita una función única que determine "¿está en estado inmutable?" para cualquier `ejecutor_tipo`
     (la misma lógica que ya describe el trigger de la sección 5.4, duplicada a propósito en Python como
     defensa de primera línea, igual criterio que el resto de este documento).
+21. **[REVISIÓN 4]** `tamano_bytes`/`tipo_mime` reportados por el cliente al pedir una URL de subida
+    (`_solicitar_url`, sección 1.2/1.4) siguen sin verificarse contra el binario real en ningún flujo de este
+    proyecto, incluido este desarrollo, **salvo** en los dos puntos nuevos que sí leen y validan el archivo
+    (cierre de mantenimiento externo y registro de certificado de calibración, punto 19). Es una debilidad
+    **preexistente** del proyecto, no introducida por este desarrollo — se señala explícitamente porque la
+    decisión de esta ronda deja la inconsistencia a la vista: dos flujos nuevos validan el binario real, el
+    resto de subidas del sistema (fotos, manuales, evidencias, informes antes de cerrar, versiones de
+    documentos) siguen confiando en lo que el cliente declara. Corregir eso en todos los flujos existentes es
+    un desarrollo propio, fuera del alcance de esta Fase 1.
+22. **[REVISIÓN 4]** El método nuevo de `AlmacenamientoPort` para leer un objeto por streaming (sección 3.4)
+    es la primera vez que el backend lee un binario completo que no generó él mismo — hasta ahora solo firma
+    URLs o genera bytes en memoria (los PDF de `reportes`/`documentos_generados`, donde el propio backend es
+    quien los crea). Dos límites a tener presentes en la implementación real: (a) la validación de magic
+    bytes es una verificación de **cabecera**, no de contenido — un archivo con la cabecera correcta de PDF
+    pero cuerpo corrupto o malicioso pasaría igual; no sustituye un antivirus ni un sandbox de apertura, solo
+    descarta el caso más burdo (extensión/mime mentidos); (b) leer el objeto completo por streaming para
+    hashearlo tiene un costo de I/O y tiempo proporcional al tamaño del archivo — aceptable para PDFs de
+    informes/certificados (decenas de MB como mucho, según los límites ya existentes en el proyecto para
+    estos tipos de archivo), pero el método no debe reutilizarse sin pensarlo para archivos potencialmente
+    mucho más grandes.
 
 ---
 
 ## 8. Resumen de lo que requiere aprobación antes de la Fase 2
 
-**[REVISIÓN 3]** De las decisiones de diseño propiamente dichas, **no queda ninguna pendiente** salvo una:
-
-- **Cómo se calcula `mantenimientos.informe_hash_sha256`** (sección 3.4, riesgo 19): frontend con Web Crypto
-  API (recomendado) vs. que el backend lea el objeto de MinIO para hashearlo. Es la única decisión de diseño
-  que sigue abierta en todo el documento.
-
-Todo lo demás de las dos rondas anteriores quedó decidido: nombre del endpoint de historial, manual existente
-a `'sin_clasificar'`, cronograma sin fechas cacheadas con el fallback por tipo de actividad, `supervisa`
-siempre opcional, congelamiento desde la primera firma con el flujo "volver a borrador", la regla sin
-excepciones sobre `DISABLE TRIGGER`, `security_invoker` en la vista, columna `corregido` separada de
-`anulado`, manejo de `DELETE` en el trigger, y — la decisión de esta ronda — calificación/verificación
-interna en el módulo de Calibraciones (opción C) con mantenimientos externos sin FOR-005 ni firmas.
+**[REVISIÓN 4] No queda ninguna decisión de diseño pendiente.** Las cuatro rondas de revisión quedaron
+resueltas: nombre del endpoint de historial, manual existente a `'sin_clasificar'`, cronograma sin fechas
+cacheadas con el fallback por tipo de actividad, `supervisa` siempre opcional, congelamiento desde la primera
+firma con el flujo "volver a borrador", la regla sin excepciones sobre `DISABLE TRIGGER`, `security_invoker`
+en la vista, columna `corregido` separada de `anulado`, manejo de `DELETE` en el trigger,
+calificación/verificación interna en el módulo de Calibraciones (opción C) con mantenimientos externos sin
+FOR-005 ni firmas, y — la decisión de esta ronda — el hash de integridad de informes/certificados lo calcula
+el backend, nunca el cliente.
 
 Puntos menores que no bloquean, para resolver durante la implementación (no son decisiones de diseño, son
 detalles de construcción):
@@ -1010,5 +1055,7 @@ detalles de construcción):
 - Revisión manual de los backfills de `ejecutor_tipo` en calibraciones y mantenimientos antes de confiar en
   ellos para reportes (riesgos 17/18) — no bloquea escribir las migraciones, sí bloquea confiar en los datos
   históricos reclasificados hasta que Calidad los revise.
+- La forma exacta del método nuevo de `AlmacenamientoPort` para lectura por streaming, y sus límites de
+  tamaño/tiempo (riesgo 22) — es un detalle de implementación de la Fase 4, no cambia el diseño.
 
 Ningún punto de este documento bloquea el inicio de la Fase 2 (ficha técnica extendida).
