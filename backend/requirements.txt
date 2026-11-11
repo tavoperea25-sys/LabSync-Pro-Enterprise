@@ -3,7 +3,7 @@ uvicorn[standard]==0.34.0
 sqlalchemy==2.0.36
 psycopg2-binary==2.9.10
 alembic==1.14.0
-pydantic[email]==2.10.4
+pydantic[email]==2.14.2
 pydantic-settings==2.7.0
 qrcode[pil]==8.0
 slowapi==0.1.9
