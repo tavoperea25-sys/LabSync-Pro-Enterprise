@@ -11,8 +11,20 @@ from app.core.errors import ConflictoDeNegocio, ErrorDeDominio, RecursoNoEncontr
 from app.modules.auditoria.domain.entities import LogAuditoria
 from app.modules.auditoria.domain.ports import AuditoriaRepository
 from app.modules.documentos.domain.ports import AlmacenamientoPort
-from app.modules.equipos.domain.entities import ESTADOS_OPERATIVOS, Equipo
+from app.modules.equipos.domain.entities import (
+    CLASIFICACIONES_RIESGO,
+    CONDICIONES_FISICAS,
+    CRITICIDADES,
+    ESTADOS_OPERATIVOS,
+    FORMAS_ADQUISICION,
+    Equipo,
+)
 from app.modules.equipos.domain.ports import EquipoRepository, FiltrosEquipo, PaginaEquipos
+from app.modules.equipos.infrastructure.repositories import (
+    FabricanteRepositorySQLAlchemy,
+    FichaTecnicaRepositorySQLAlchemy,
+    ProveedorRepositorySQLAlchemy,
+)
 
 _MODULO = "equipos"
 
@@ -84,6 +96,21 @@ class DatosEquipo:
     observaciones: str | None = None
     foto_object_key: str | None = None
     manual_object_key: str | None = None
+    # Fase 2 de hojas de vida (docs/25-...md sección 2).
+    proveedor_id: uuid.UUID | None = None
+    fabricante_id: uuid.UUID | None = None
+    capitulo: str | None = None
+    grupo: str | None = None
+    subgrupo: str | None = None
+    ubicacion: str | None = None
+    numero_inventario: str | None = None
+    condicion_fisica: str | None = None
+    clasificacion_riesgo: str | None = None
+    criticidad: str | None = None
+    forma_adquisicion: str | None = None
+    garantia: bool | None = None
+    garantia_inicio: date | None = None
+    garantia_fin: date | None = None
 
 
 @dataclass
@@ -119,6 +146,28 @@ class NoPuedeActivarseConCalibracionVencida(ConflictoDeNegocio):
         )
 
 
+class ProveedorInvalido(ErrorDeDominio):
+    """Postgres evalúa las FK sin pasar por RLS — sin esta validación en el
+    servicio, un `proveedor_id` de otro laboratorio solo fallaría con una
+    violación de FK (500), no con un error de dominio legible."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "proveedor_invalido",
+            "El proveedor seleccionado no existe en este laboratorio.",
+            {"campo": "proveedor_id"},
+        )
+
+
+class FabricanteInvalido(ErrorDeDominio):
+    def __init__(self) -> None:
+        super().__init__(
+            "fabricante_invalido",
+            "El fabricante seleccionado no existe en este laboratorio.",
+            {"campo": "fabricante_id"},
+        )
+
+
 def _a_dict_auditable(equipo: Equipo) -> dict:
     datos = asdict(equipo)
     # laboratorio_id/id no aportan valor en un diff de auditoría legible.
@@ -132,11 +181,21 @@ class EquipoService:
         self,
         equipos: EquipoRepository,
         auditoria: AuditoriaRepository,
+        proveedores: ProveedorRepositorySQLAlchemy,
+        fabricantes: FabricanteRepositorySQLAlchemy,
+        ficha_tecnica: FichaTecnicaRepositorySQLAlchemy,
         almacenamiento_fotos: AlmacenamientoPort | None = None,
         almacenamiento_manuales: AlmacenamientoPort | None = None,
     ) -> None:
         self._equipos = equipos
         self._auditoria = auditoria
+        # Fase 2 de hojas de vida — para validar proveedor_id/fabricante_id
+        # bajo RLS (sección "Aislamiento entre laboratorios en las FK" del
+        # diseño) y para que `duplicar()` pueda copiar ficha técnica/
+        # manuales (RN-EQ-04 extendida, ver `duplicar()` más abajo).
+        self._proveedores = proveedores
+        self._fabricantes = fabricantes
+        self._ficha_tecnica = ficha_tecnica
         # Opcional: la mayoría de casos de uso (listar, duplicar, historial)
         # no necesitan tocar MinIO — mismo criterio que `QrService.auditoria`.
         # Dos instancias porque foto y manual viven en buckets distintos
@@ -185,6 +244,8 @@ class EquipoService:
 
     def crear(self, laboratorio_id: uuid.UUID, datos: DatosEquipo, actor: ActorContexto) -> Equipo:
         self._validar_estado(datos.estado_operativo)
+        self._validar_ficha_tecnica(datos)
+        self._validar_proveedor_y_fabricante(datos)
         if self._equipos.existe_codigo(datos.codigo_interno):
             raise CodigoInternoDuplicado(datos.codigo_interno)  # RN-EQ-02
 
@@ -214,6 +275,8 @@ class EquipoService:
 
     def actualizar(self, equipo_id: uuid.UUID, datos: DatosEquipo, actor: ActorContexto) -> Equipo:
         self._validar_estado(datos.estado_operativo)
+        self._validar_ficha_tecnica(datos)
+        self._validar_proveedor_y_fabricante(datos)
         actual = self._equipos.obtener_por_id(equipo_id)
         if actual is None or not actual.esta_activo():
             raise EquipoNoEncontrado()
@@ -246,6 +309,20 @@ class EquipoService:
             observaciones=datos.observaciones,
             foto_object_key=datos.foto_object_key,
             manual_object_key=datos.manual_object_key,
+            proveedor_id=datos.proveedor_id,
+            fabricante_id=datos.fabricante_id,
+            capitulo=datos.capitulo,
+            grupo=datos.grupo,
+            subgrupo=datos.subgrupo,
+            ubicacion=datos.ubicacion,
+            numero_inventario=datos.numero_inventario,
+            condicion_fisica=datos.condicion_fisica,
+            clasificacion_riesgo=datos.clasificacion_riesgo,
+            criticidad=datos.criticidad,
+            forma_adquisicion=datos.forma_adquisicion,
+            garantia=datos.garantia,
+            garantia_inicio=datos.garantia_inicio,
+            garantia_fin=datos.garantia_fin,
             eliminado_en=actual.eliminado_en,
             creado_en=actual.creado_en,
             actualizado_en=datetime.utcnow(),
@@ -285,7 +362,28 @@ class EquipoService:
 
     def duplicar(self, equipo_id: uuid.UUID, actor: ActorContexto) -> Equipo:
         """RF-EQ-05. RN-EQ-04: copia solo la ficha técnica, nunca el
-        historial (calibraciones/mantenimientos) del original."""
+        historial (calibraciones/mantenimientos) del original.
+
+        RN-EQ-04 extendida (Fase 2 de hojas de vida — docs/25-...md no cubre
+        `duplicar()`, criterio acordado con Gustavo): se copia lo que
+        describe el MODELO del equipo (igual que `marca`/`fabricante`/
+        `manual_object_key`, ya copiados antes de esta fase): los campos de
+        clasificación, `proveedor_id`/`fabricante_id`, la ficha técnica
+        extendida y los manuales. No se copia lo específico de la UNIDAD
+        FÍSICA original: `numero_inventario`/`garantia*` (mismo criterio que
+        `fecha_adquisicion`, ya excluida) ni los accesorios (mismo criterio
+        que la fotografía — los accesorios físicos de una unidad no son los
+        de su copia).
+
+        `manual_object_key` y el `object_key` de cada `equipo_manuales`
+        quedan COMPARTIDOS entre el original y la copia (no se duplica el
+        objeto en MinIO: verificado que ningún flujo de este módulo llama
+        `AlmacenamientoPort.eliminar_objeto()` — ni el soft delete de
+        `eliminar()` ni un reemplazo por PATCH lo tocan). Si en el futuro se
+        agrega un flujo que SÍ borre ese objeto, debe primero verificar que
+        ninguna otra fila (de `equipos` o de `equipo_manuales`) todavía lo
+        referencie, o copiar el objeto en vez de compartir la referencia.
+        """
         original = self._equipos.obtener_por_id(equipo_id)
         if original is None or not original.esta_activo():
             raise EquipoNoEncontrado()
@@ -312,9 +410,47 @@ class EquipoService:
             # modelo/tipo de equipo, no una unidad física específica — es
             # tan válido para la copia como para el original (RN-EQ-04 solo
             # excluye historial, no campos de ficha técnica como este).
+            # Comparte `object_key` con el original — ver nota de MinIO en
+            # el docstring de este método.
             manual_object_key=original.manual_object_key,
+            proveedor_id=original.proveedor_id,
+            fabricante_id=original.fabricante_id,
+            capitulo=original.capitulo,
+            grupo=original.grupo,
+            subgrupo=original.subgrupo,
+            ubicacion=original.ubicacion,
+            numero_inventario=None,  # específico de la unidad física original
+            condicion_fisica=original.condicion_fisica,
+            clasificacion_riesgo=original.clasificacion_riesgo,
+            criticidad=original.criticidad,
+            forma_adquisicion=original.forma_adquisicion,
+            garantia=None,  # específico de la unidad física original
+            garantia_inicio=None,
+            garantia_fin=None,
         )
-        return self.crear(original.laboratorio_id, datos, actor)
+        copia = self.crear(original.laboratorio_id, datos, actor)
+
+        ficha_original = self._ficha_tecnica.obtener_ficha_tecnica(equipo_id)
+        if ficha_original is not None:
+            campos = asdict(ficha_original)
+            campos.pop("equipo_id", None)
+            campos.pop("creado_en", None)
+            campos.pop("actualizado_en", None)
+            self._ficha_tecnica.guardar_ficha_tecnica(original.laboratorio_id, copia.id, campos)
+
+        for manual in self._ficha_tecnica.listar_manuales(equipo_id):
+            # Comparte `object_key` con el original — ver nota de MinIO en
+            # el docstring de este método.
+            self._ficha_tecnica.guardar_manual(
+                original.laboratorio_id,
+                copia.id,
+                manual.tipo,
+                manual.disponible,
+                manual.idioma,
+                manual.object_key,
+            )
+
+        return copia
 
     def historial(self, equipo_id: uuid.UUID) -> list[LogAuditoria]:
         """RF-EQ-09. A diferencia de `obtener()`, no exige que el equipo esté
@@ -355,6 +491,20 @@ class EquipoService:
             observaciones=datos.observaciones,
             foto_object_key=datos.foto_object_key,
             manual_object_key=datos.manual_object_key,
+            proveedor_id=datos.proveedor_id,
+            fabricante_id=datos.fabricante_id,
+            capitulo=datos.capitulo,
+            grupo=datos.grupo,
+            subgrupo=datos.subgrupo,
+            ubicacion=datos.ubicacion,
+            numero_inventario=datos.numero_inventario,
+            condicion_fisica=datos.condicion_fisica,
+            clasificacion_riesgo=datos.clasificacion_riesgo,
+            criticidad=datos.criticidad,
+            forma_adquisicion=datos.forma_adquisicion,
+            garantia=datos.garantia,
+            garantia_inicio=datos.garantia_inicio,
+            garantia_fin=datos.garantia_fin,
             eliminado_en=None,
             creado_en=ahora,
             actualizado_en=ahora,
@@ -368,3 +518,46 @@ class EquipoService:
                 f"'{estado}' no es un estado operativo válido.",
                 {"valores_permitidos": list(ESTADOS_OPERATIVOS)},
             )
+
+    @staticmethod
+    def _validar_dominio_opcional(valor: str | None, dominio: tuple[str, ...], campo: str) -> None:
+        if valor is not None and valor not in dominio:
+            raise ErrorDeDominio(
+                f"{campo}_invalido",
+                f"'{valor}' no es un valor válido para '{campo}'.",
+                {"campo": campo, "valores_permitidos": list(dominio)},
+            )
+
+    @classmethod
+    def _validar_ficha_tecnica(cls, datos: DatosEquipo) -> None:
+        # Fase 2 de hojas de vida — ningún campo técnico es obligatorio
+        # (docs/24-...md sección 3.8), pero si se envía un valor debe estar
+        # dentro del dominio cerrado que ya refuerza el CHECK de la BD
+        # (migración 0019) — mismo criterio que `_validar_estado`.
+        cls._validar_dominio_opcional(datos.condicion_fisica, CONDICIONES_FISICAS, "condicion_fisica")
+        cls._validar_dominio_opcional(
+            datos.clasificacion_riesgo, CLASIFICACIONES_RIESGO, "clasificacion_riesgo"
+        )
+        cls._validar_dominio_opcional(datos.criticidad, CRITICIDADES, "criticidad")
+        cls._validar_dominio_opcional(datos.forma_adquisicion, FORMAS_ADQUISICION, "forma_adquisicion")
+        if (
+            datos.garantia_inicio is not None
+            and datos.garantia_fin is not None
+            and datos.garantia_fin < datos.garantia_inicio
+        ):
+            raise ErrorDeDominio(
+                "garantia_fechas_invalidas",
+                "La fecha de fin de garantía no puede ser anterior a la de inicio.",
+                {"campo": "garantia_fin"},
+            )
+
+    def _validar_proveedor_y_fabricante(self, datos: DatosEquipo) -> None:
+        # Aislamiento multi-tenant en la FK: la FK compuesta de la base de
+        # datos (migración 0018) ya lo impide, pero sin esta validación una
+        # referencia de otro laboratorio fallaría con una violación de FK
+        # (500), no con un error de dominio legible. `obtener_por_id` busca
+        # bajo RLS — una fila de otro laboratorio nunca aparece.
+        if datos.proveedor_id is not None and self._proveedores.obtener_por_id(datos.proveedor_id) is None:
+            raise ProveedorInvalido()
+        if datos.fabricante_id is not None and self._fabricantes.obtener_por_id(datos.fabricante_id) is None:
+            raise FabricanteInvalido()
