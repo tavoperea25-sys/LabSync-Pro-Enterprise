@@ -13,10 +13,12 @@ from dataclasses import dataclass
 from app.core.errors import ConflictoDeNegocio, ErrorDeDominio, RecursoNoEncontrado
 from app.modules.auditoria.domain.ports import AuditoriaRepository
 from app.modules.equipos.domain.ports import EquipoRepository
-from app.modules.equipos.infrastructure.models import Area, CategoriaEquipo
+from app.modules.equipos.infrastructure.models import Area, CategoriaEquipo, Fabricante, Proveedor
 from app.modules.equipos.infrastructure.repositories import (
     AreaRepositorySQLAlchemy,
     CategoriaEquipoRepositorySQLAlchemy,
+    FabricanteRepositorySQLAlchemy,
+    ProveedorRepositorySQLAlchemy,
 )
 
 _MODULO = "configuracion"
@@ -36,6 +38,16 @@ class CategoriaNoEncontrada(RecursoNoEncontrado):
 class AreaNoEncontrada(RecursoNoEncontrado):
     def __init__(self) -> None:
         super().__init__("area_no_encontrada", "El área no existe.")
+
+
+class ProveedorNoEncontrado(RecursoNoEncontrado):
+    def __init__(self) -> None:
+        super().__init__("proveedor_no_encontrado", "El proveedor no existe.")
+
+
+class FabricanteNoEncontrado(RecursoNoEncontrado):
+    def __init__(self) -> None:
+        super().__init__("fabricante_no_encontrado", "El fabricante no existe.")
 
 
 class NombreYaExiste(ConflictoDeNegocio):
@@ -67,11 +79,15 @@ class ReferenciaService:
         areas: AreaRepositorySQLAlchemy,
         equipos: EquipoRepository,
         auditoria: AuditoriaRepository,
+        proveedores: ProveedorRepositorySQLAlchemy,
+        fabricantes: FabricanteRepositorySQLAlchemy,
     ) -> None:
         self._categorias = categorias
         self._areas = areas
         self._equipos = equipos
         self._auditoria = auditoria
+        self._proveedores = proveedores
+        self._fabricantes = fabricantes
 
     # ---- Categorías ---------------------------------------------------------
 
@@ -157,6 +173,112 @@ class ReferenciaService:
             raise EnUso("area", "área")
         self._areas.eliminar(area_id)
         self._auditar(laboratorio_id, actor, "eliminar_area", area_id, None)
+
+    # ---- Proveedores (Fase 2 de hojas de vida) ---------------------------------
+
+    def crear_proveedor(
+        self,
+        laboratorio_id: uuid.UUID,
+        actor: ActorContexto,
+        nombre: str,
+        pais_ciudad: str | None,
+        direccion: str | None,
+        email: str | None,
+        telefono: str | None,
+        contacto: str | None,
+    ) -> Proveedor:
+        if self._proveedores.existe_nombre(laboratorio_id, nombre):
+            raise NombreYaExiste("proveedor", "proveedor")
+        fila = self._proveedores.crear(
+            laboratorio_id, nombre, pais_ciudad, direccion, email, telefono, contacto
+        )
+        self._auditar(laboratorio_id, actor, "crear_proveedor", fila.id, {"nombre": nombre})
+        return fila
+
+    def actualizar_proveedor(
+        self,
+        laboratorio_id: uuid.UUID,
+        actor: ActorContexto,
+        proveedor_id: uuid.UUID,
+        nombre: str,
+        pais_ciudad: str | None,
+        direccion: str | None,
+        email: str | None,
+        telefono: str | None,
+        contacto: str | None,
+    ) -> Proveedor:
+        if self._proveedores.obtener_por_id(proveedor_id) is None:
+            raise ProveedorNoEncontrado()
+        if self._proveedores.existe_nombre(laboratorio_id, nombre, excluir_id=proveedor_id):
+            raise NombreYaExiste("proveedor", "proveedor")
+        fila = self._proveedores.actualizar(
+            proveedor_id, nombre, pais_ciudad, direccion, email, telefono, contacto
+        )
+        self._auditar(laboratorio_id, actor, "actualizar_proveedor", proveedor_id, {"nombre": nombre})
+        return fila
+
+    def eliminar_proveedor(
+        self, laboratorio_id: uuid.UUID, actor: ActorContexto, proveedor_id: uuid.UUID
+    ) -> None:
+        if self._proveedores.obtener_por_id(proveedor_id) is None:
+            raise ProveedorNoEncontrado()
+        if self._equipos.existe_con_proveedor(proveedor_id):
+            raise EnUso("proveedor", "proveedor")
+        self._proveedores.eliminar(proveedor_id)
+        self._auditar(laboratorio_id, actor, "eliminar_proveedor", proveedor_id, None)
+
+    # ---- Fabricantes (Fase 2 de hojas de vida) ---------------------------------
+
+    def crear_fabricante(
+        self,
+        laboratorio_id: uuid.UUID,
+        actor: ActorContexto,
+        nombre: str,
+        pais_ciudad: str | None,
+        direccion: str | None,
+        email: str | None,
+        telefono: str | None,
+        contacto: str | None,
+    ) -> Fabricante:
+        if self._fabricantes.existe_nombre(laboratorio_id, nombre):
+            raise NombreYaExiste("fabricante", "fabricante")
+        fila = self._fabricantes.crear(
+            laboratorio_id, nombre, pais_ciudad, direccion, email, telefono, contacto
+        )
+        self._auditar(laboratorio_id, actor, "crear_fabricante", fila.id, {"nombre": nombre})
+        return fila
+
+    def actualizar_fabricante(
+        self,
+        laboratorio_id: uuid.UUID,
+        actor: ActorContexto,
+        fabricante_id: uuid.UUID,
+        nombre: str,
+        pais_ciudad: str | None,
+        direccion: str | None,
+        email: str | None,
+        telefono: str | None,
+        contacto: str | None,
+    ) -> Fabricante:
+        if self._fabricantes.obtener_por_id(fabricante_id) is None:
+            raise FabricanteNoEncontrado()
+        if self._fabricantes.existe_nombre(laboratorio_id, nombre, excluir_id=fabricante_id):
+            raise NombreYaExiste("fabricante", "fabricante")
+        fila = self._fabricantes.actualizar(
+            fabricante_id, nombre, pais_ciudad, direccion, email, telefono, contacto
+        )
+        self._auditar(laboratorio_id, actor, "actualizar_fabricante", fabricante_id, {"nombre": nombre})
+        return fila
+
+    def eliminar_fabricante(
+        self, laboratorio_id: uuid.UUID, actor: ActorContexto, fabricante_id: uuid.UUID
+    ) -> None:
+        if self._fabricantes.obtener_por_id(fabricante_id) is None:
+            raise FabricanteNoEncontrado()
+        if self._equipos.existe_con_fabricante(fabricante_id):
+            raise EnUso("fabricante", "fabricante")
+        self._fabricantes.eliminar(fabricante_id)
+        self._auditar(laboratorio_id, actor, "eliminar_fabricante", fabricante_id, None)
 
     def _auditar(
         self,

@@ -26,6 +26,22 @@ class EquipoRequest(BaseModel):
     observaciones: str | None = None
     foto_object_key: str | None = None
     manual_object_key: str | None = None
+    # Fase 2 de hojas de vida (docs/25-...md sección 2) — todos opcionales,
+    # ningún campo técnico es obligatorio (docs/24-...md sección 3.8).
+    proveedor_id: uuid.UUID | None = None
+    fabricante_id: uuid.UUID | None = None
+    capitulo: str | None = None
+    grupo: str | None = None
+    subgrupo: str | None = None
+    ubicacion: str | None = None
+    numero_inventario: str | None = None
+    condicion_fisica: str | None = None
+    clasificacion_riesgo: str | None = None
+    criticidad: str | None = None
+    forma_adquisicion: str | None = None
+    garantia: bool | None = None
+    garantia_inicio: date | None = None
+    garantia_fin: date | None = None
 
 
 class EquipoOut(BaseModel):
@@ -53,6 +69,20 @@ class EquipoOut(BaseModel):
     # es el object_key estable, mismo criterio que la foto.
     manual_url: str | None
     manual_object_key: str | None
+    proveedor_id: uuid.UUID | None
+    fabricante_id: uuid.UUID | None
+    capitulo: str | None
+    grupo: str | None
+    subgrupo: str | None
+    ubicacion: str | None
+    numero_inventario: str | None
+    condicion_fisica: str | None
+    clasificacion_riesgo: str | None
+    criticidad: str | None
+    forma_adquisicion: str | None
+    garantia: bool | None
+    garantia_inicio: date | None
+    garantia_fin: date | None
     creado_en: datetime
     actualizado_en: datetime
 
@@ -118,3 +148,121 @@ class HistorialEntradaOut(BaseModel):
 
 
 ESTADOS_OPERATIVOS_VALIDOS = ESTADOS_OPERATIVOS
+
+
+# ---- Catálogos de proveedores y fabricantes (Fase 2 de hojas de vida) ---------
+
+
+class ProveedorOut(BaseModel):
+    id: uuid.UUID
+    nombre: str
+    pais_ciudad: str | None
+    direccion: str | None
+    email: str | None
+    telefono: str | None
+    contacto: str | None
+
+
+class ProveedorRequest(BaseModel):
+    nombre: str = Field(..., min_length=1, max_length=200)
+    pais_ciudad: str | None = None
+    direccion: str | None = None
+    email: str | None = None
+    telefono: str | None = None
+    contacto: str | None = None
+
+
+class FabricanteOut(BaseModel):
+    id: uuid.UUID
+    nombre: str
+    pais_ciudad: str | None
+    direccion: str | None
+    email: str | None
+    telefono: str | None
+    contacto: str | None
+
+
+class FabricanteRequest(BaseModel):
+    nombre: str = Field(..., min_length=1, max_length=200)
+    pais_ciudad: str | None = None
+    direccion: str | None = None
+    email: str | None = None
+    telefono: str | None = None
+    contacto: str | None = None
+
+
+# ---- Ficha técnica extendida, accesorios y manuales ---------------------------
+
+
+class FichaTecnicaOut(BaseModel):
+    voltaje: str | None
+    corriente: str | None
+    frecuencia: str | None
+    corriente_ma: str | None
+    variable_medicion: str | None
+    rango_medicion: str | None
+    rpm: str | None
+    temperatura_trabajo: str | None
+    humedad_trabajo: str | None
+    peso: str | None
+    dimensiones: str | None
+    color: str | None
+    numero_puertas: str | None
+    clase_sistema: str | None
+    alimentacion: str | None
+    uso: str | None
+    uso_especifico: str | None
+    condiciones_ambientales: str | None
+    datos_adicionales: dict
+    # `None` cuando el equipo todavía no tiene fila en `equipo_ficha_tecnica`
+    # (relación 1:1 opcional hasta el primer `PUT` — ver router).
+    actualizado_en: datetime | None
+
+
+class FichaTecnicaRequest(BaseModel):
+    voltaje: str | None = None
+    corriente: str | None = None
+    frecuencia: str | None = None
+    corriente_ma: str | None = None
+    variable_medicion: str | None = None
+    rango_medicion: str | None = None
+    rpm: str | None = None
+    temperatura_trabajo: str | None = None
+    humedad_trabajo: str | None = None
+    peso: str | None = None
+    dimensiones: str | None = None
+    color: str | None = None
+    numero_puertas: str | None = None
+    clase_sistema: str | None = None
+    alimentacion: str | None = None
+    uso: str | None = None
+    uso_especifico: str | None = None
+    condiciones_ambientales: str | None = None
+    datos_adicionales: dict = Field(default_factory=dict)
+
+
+class AccesorioOut(BaseModel):
+    id: uuid.UUID
+    cantidad: int | None
+    descripcion: str
+    observaciones: str | None
+
+
+class AccesorioRequest(BaseModel):
+    cantidad: int | None = None
+    descripcion: str = Field(..., min_length=1)
+    observaciones: str | None = None
+
+
+class ManualOut(BaseModel):
+    tipo: str
+    disponible: bool
+    idioma: str | None
+    object_key: str | None
+    url: str | None
+
+
+class ManualRequest(BaseModel):
+    disponible: bool = False
+    idioma: str | None = None
+    object_key: str | None = None

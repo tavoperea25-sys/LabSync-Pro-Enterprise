@@ -16,6 +16,7 @@ from app.core.ip import ip_valida
 from app.modules.auditoria.infrastructure.repositories import AuditoriaRepositorySQLAlchemy
 from app.modules.auth.presentation.dependencies import UsuarioContexto, requiere_permiso
 from app.modules.equipos.application.equipo_service import ActorContexto, DatosEquipo, EquipoService
+from app.modules.equipos.application.ficha_tecnica_service import DatosFichaTecnica, FichaTecnicaService
 from app.modules.equipos.application.referencia_service import ActorContexto as ActorReferencia
 from app.modules.equipos.application.referencia_service import ReferenciaService
 from app.modules.equipos.domain.ports import FiltrosEquipo
@@ -24,16 +25,29 @@ from app.modules.equipos.infrastructure.repositories import (
     AreaRepositorySQLAlchemy,
     CategoriaEquipoRepositorySQLAlchemy,
     EquipoRepositorySQLAlchemy,
+    FabricanteRepositorySQLAlchemy,
+    FichaTecnicaRepositorySQLAlchemy,
+    ProveedorRepositorySQLAlchemy,
 )
 from app.modules.equipos.presentation.schemas import (
+    AccesorioOut,
+    AccesorioRequest,
     AreaOut,
     AreaRequest,
     CategoriaEquipoOut,
     CategoriaEquipoRequest,
     EquipoOut,
     EquipoRequest,
+    FabricanteOut,
+    FabricanteRequest,
+    FichaTecnicaOut,
+    FichaTecnicaRequest,
     HistorialEntradaOut,
+    ManualOut,
+    ManualRequest,
     PaginaEquiposOut,
+    ProveedorOut,
+    ProveedorRequest,
     UrlFotoOut,
     UrlFotoRequest,
     UrlManualOut,
@@ -55,9 +69,16 @@ def _service(db: Session) -> EquipoService:
     return EquipoService(
         EquipoRepositorySQLAlchemy(db),
         AuditoriaRepositorySQLAlchemy(db),
+        ProveedorRepositorySQLAlchemy(db),
+        FabricanteRepositorySQLAlchemy(db),
+        FichaTecnicaRepositorySQLAlchemy(db),
         _almacenamiento_fotos,
         _almacenamiento_manuales,
     )
+
+
+def _ficha_tecnica_service(db: Session) -> FichaTecnicaService:
+    return FichaTecnicaService(EquipoRepositorySQLAlchemy(db), FichaTecnicaRepositorySQLAlchemy(db))
 
 
 def _generar_qr(db: Session, laboratorio_id: uuid.UUID, equipo_id: uuid.UUID) -> None:
@@ -95,6 +116,20 @@ def _a_out(equipo, service: EquipoService) -> EquipoOut:  # type: ignore[no-unty
         foto_object_key=equipo.foto_object_key,
         manual_url=service.url_manual(equipo),
         manual_object_key=equipo.manual_object_key,
+        proveedor_id=equipo.proveedor_id,
+        fabricante_id=equipo.fabricante_id,
+        capitulo=equipo.capitulo,
+        grupo=equipo.grupo,
+        subgrupo=equipo.subgrupo,
+        ubicacion=equipo.ubicacion,
+        numero_inventario=equipo.numero_inventario,
+        condicion_fisica=equipo.condicion_fisica,
+        clasificacion_riesgo=equipo.clasificacion_riesgo,
+        criticidad=equipo.criticidad,
+        forma_adquisicion=equipo.forma_adquisicion,
+        garantia=equipo.garantia,
+        garantia_inicio=equipo.garantia_inicio,
+        garantia_fin=equipo.garantia_fin,
         creado_en=equipo.creado_en,
         actualizado_en=equipo.actualizado_en,
     )
@@ -275,6 +310,8 @@ def _referencia_service(db: Session) -> ReferenciaService:
         AreaRepositorySQLAlchemy(db),
         EquipoRepositorySQLAlchemy(db),
         AuditoriaRepositorySQLAlchemy(db),
+        ProveedorRepositorySQLAlchemy(db),
+        FabricanteRepositorySQLAlchemy(db),
     )
 
 
@@ -399,3 +436,292 @@ def eliminar_area(
         usuario.laboratorio_id, _actor_referencia(request, usuario), area_id
     )
     db.commit()
+
+
+# ---- Catálogos de proveedores y fabricantes (Fase 2 de hojas de vida) ---------
+
+
+def _proveedor_a_out(fila) -> ProveedorOut:  # type: ignore[no-untyped-def]
+    return ProveedorOut(
+        id=fila.id,
+        nombre=fila.nombre,
+        pais_ciudad=fila.pais_ciudad,
+        direccion=fila.direccion,
+        email=fila.email,
+        telefono=fila.telefono,
+        contacto=fila.contacto,
+    )
+
+
+def _fabricante_a_out(fila) -> FabricanteOut:  # type: ignore[no-untyped-def]
+    return FabricanteOut(
+        id=fila.id,
+        nombre=fila.nombre,
+        pais_ciudad=fila.pais_ciudad,
+        direccion=fila.direccion,
+        email=fila.email,
+        telefono=fila.telefono,
+        contacto=fila.contacto,
+    )
+
+
+@router.get("/proveedores", response_model=list[ProveedorOut])
+def listar_proveedores(
+    db: Session = Depends(get_db), _usuario: UsuarioContexto = Depends(requiere_permiso("equipos.leer"))
+) -> list[ProveedorOut]:
+    return [_proveedor_a_out(f) for f in ProveedorRepositorySQLAlchemy(db).listar()]
+
+
+@router.post("/proveedores", response_model=ProveedorOut, status_code=201)
+def crear_proveedor(
+    datos: ProveedorRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: UsuarioContexto = Depends(requiere_permiso("configuracion.gestionar")),
+) -> ProveedorOut:
+    fila = _referencia_service(db).crear_proveedor(
+        usuario.laboratorio_id, _actor_referencia(request, usuario), **datos.model_dump()
+    )
+    db.commit()
+    return _proveedor_a_out(fila)
+
+
+@router.patch("/proveedores/{proveedor_id}", response_model=ProveedorOut)
+def actualizar_proveedor(
+    proveedor_id: uuid.UUID,
+    datos: ProveedorRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: UsuarioContexto = Depends(requiere_permiso("configuracion.gestionar")),
+) -> ProveedorOut:
+    fila = _referencia_service(db).actualizar_proveedor(
+        usuario.laboratorio_id, _actor_referencia(request, usuario), proveedor_id, **datos.model_dump()
+    )
+    db.commit()
+    return _proveedor_a_out(fila)
+
+
+@router.delete("/proveedores/{proveedor_id}", status_code=204, response_model=None)
+def eliminar_proveedor(
+    proveedor_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: UsuarioContexto = Depends(requiere_permiso("configuracion.gestionar")),
+) -> None:
+    _referencia_service(db).eliminar_proveedor(
+        usuario.laboratorio_id, _actor_referencia(request, usuario), proveedor_id
+    )
+    db.commit()
+
+
+@router.get("/fabricantes", response_model=list[FabricanteOut])
+def listar_fabricantes(
+    db: Session = Depends(get_db), _usuario: UsuarioContexto = Depends(requiere_permiso("equipos.leer"))
+) -> list[FabricanteOut]:
+    return [_fabricante_a_out(f) for f in FabricanteRepositorySQLAlchemy(db).listar()]
+
+
+@router.post("/fabricantes", response_model=FabricanteOut, status_code=201)
+def crear_fabricante(
+    datos: FabricanteRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: UsuarioContexto = Depends(requiere_permiso("configuracion.gestionar")),
+) -> FabricanteOut:
+    fila = _referencia_service(db).crear_fabricante(
+        usuario.laboratorio_id, _actor_referencia(request, usuario), **datos.model_dump()
+    )
+    db.commit()
+    return _fabricante_a_out(fila)
+
+
+@router.patch("/fabricantes/{fabricante_id}", response_model=FabricanteOut)
+def actualizar_fabricante(
+    fabricante_id: uuid.UUID,
+    datos: FabricanteRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: UsuarioContexto = Depends(requiere_permiso("configuracion.gestionar")),
+) -> FabricanteOut:
+    fila = _referencia_service(db).actualizar_fabricante(
+        usuario.laboratorio_id, _actor_referencia(request, usuario), fabricante_id, **datos.model_dump()
+    )
+    db.commit()
+    return _fabricante_a_out(fila)
+
+
+@router.delete("/fabricantes/{fabricante_id}", status_code=204, response_model=None)
+def eliminar_fabricante(
+    fabricante_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: UsuarioContexto = Depends(requiere_permiso("configuracion.gestionar")),
+) -> None:
+    _referencia_service(db).eliminar_fabricante(
+        usuario.laboratorio_id, _actor_referencia(request, usuario), fabricante_id
+    )
+    db.commit()
+
+
+# ---- Ficha técnica extendida, accesorios y manuales ---------------------------
+
+
+def _ficha_tecnica_a_out(ficha) -> FichaTecnicaOut:  # type: ignore[no-untyped-def]
+    return FichaTecnicaOut(
+        voltaje=ficha.voltaje,
+        corriente=ficha.corriente,
+        frecuencia=ficha.frecuencia,
+        corriente_ma=ficha.corriente_ma,
+        variable_medicion=ficha.variable_medicion,
+        rango_medicion=ficha.rango_medicion,
+        rpm=ficha.rpm,
+        temperatura_trabajo=ficha.temperatura_trabajo,
+        humedad_trabajo=ficha.humedad_trabajo,
+        peso=ficha.peso,
+        dimensiones=ficha.dimensiones,
+        color=ficha.color,
+        numero_puertas=ficha.numero_puertas,
+        clase_sistema=ficha.clase_sistema,
+        alimentacion=ficha.alimentacion,
+        uso=ficha.uso,
+        uso_especifico=ficha.uso_especifico,
+        condiciones_ambientales=ficha.condiciones_ambientales,
+        datos_adicionales=ficha.datos_adicionales,
+        actualizado_en=ficha.actualizado_en,
+    )
+
+
+_FICHA_TECNICA_VACIA = FichaTecnicaOut(
+    voltaje=None,
+    corriente=None,
+    frecuencia=None,
+    corriente_ma=None,
+    variable_medicion=None,
+    rango_medicion=None,
+    rpm=None,
+    temperatura_trabajo=None,
+    humedad_trabajo=None,
+    peso=None,
+    dimensiones=None,
+    color=None,
+    numero_puertas=None,
+    clase_sistema=None,
+    alimentacion=None,
+    uso=None,
+    uso_especifico=None,
+    condiciones_ambientales=None,
+    datos_adicionales={},
+    actualizado_en=None,
+)
+
+
+@router.get("/equipos/{equipo_id}/ficha-tecnica", response_model=FichaTecnicaOut)
+def obtener_ficha_tecnica(
+    equipo_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _usuario: UsuarioContexto = Depends(requiere_permiso("equipos.leer")),
+) -> FichaTecnicaOut:
+    ficha = _ficha_tecnica_service(db).obtener_ficha_tecnica(equipo_id)
+    return _ficha_tecnica_a_out(ficha) if ficha is not None else _FICHA_TECNICA_VACIA
+
+
+@router.put("/equipos/{equipo_id}/ficha-tecnica", response_model=FichaTecnicaOut)
+def guardar_ficha_tecnica(
+    equipo_id: uuid.UUID,
+    datos: FichaTecnicaRequest,
+    db: Session = Depends(get_db),
+    _usuario: UsuarioContexto = Depends(requiere_permiso("equipos.crear")),
+) -> FichaTecnicaOut:
+    ficha = _ficha_tecnica_service(db).guardar_ficha_tecnica(
+        equipo_id, DatosFichaTecnica(**datos.model_dump())
+    )
+    db.commit()
+    return _ficha_tecnica_a_out(ficha)
+
+
+def _accesorio_a_out(fila) -> AccesorioOut:  # type: ignore[no-untyped-def]
+    return AccesorioOut(
+        id=fila.id, cantidad=fila.cantidad, descripcion=fila.descripcion, observaciones=fila.observaciones
+    )
+
+
+@router.get("/equipos/{equipo_id}/accesorios", response_model=list[AccesorioOut])
+def listar_accesorios(
+    equipo_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _usuario: UsuarioContexto = Depends(requiere_permiso("equipos.leer")),
+) -> list[AccesorioOut]:
+    return [_accesorio_a_out(f) for f in _ficha_tecnica_service(db).listar_accesorios(equipo_id)]
+
+
+@router.post("/equipos/{equipo_id}/accesorios", response_model=AccesorioOut, status_code=201)
+def crear_accesorio(
+    equipo_id: uuid.UUID,
+    datos: AccesorioRequest,
+    db: Session = Depends(get_db),
+    _usuario: UsuarioContexto = Depends(requiere_permiso("equipos.crear")),
+) -> AccesorioOut:
+    fila = _ficha_tecnica_service(db).crear_accesorio(
+        equipo_id, datos.cantidad, datos.descripcion, datos.observaciones
+    )
+    db.commit()
+    return _accesorio_a_out(fila)
+
+
+@router.patch("/equipos/{equipo_id}/accesorios/{accesorio_id}", response_model=AccesorioOut)
+def actualizar_accesorio(
+    equipo_id: uuid.UUID,
+    accesorio_id: uuid.UUID,
+    datos: AccesorioRequest,
+    db: Session = Depends(get_db),
+    _usuario: UsuarioContexto = Depends(requiere_permiso("equipos.crear")),
+) -> AccesorioOut:
+    fila = _ficha_tecnica_service(db).actualizar_accesorio(
+        equipo_id, accesorio_id, datos.cantidad, datos.descripcion, datos.observaciones
+    )
+    db.commit()
+    return _accesorio_a_out(fila)
+
+
+@router.delete("/equipos/{equipo_id}/accesorios/{accesorio_id}", status_code=204, response_model=None)
+def eliminar_accesorio(
+    equipo_id: uuid.UUID,
+    accesorio_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _usuario: UsuarioContexto = Depends(requiere_permiso("equipos.crear")),
+) -> None:
+    _ficha_tecnica_service(db).eliminar_accesorio(equipo_id, accesorio_id)
+    db.commit()
+
+
+def _manual_a_out(fila) -> ManualOut:  # type: ignore[no-untyped-def]
+    url = None
+    if fila.object_key is not None:
+        url = _almacenamiento_manuales.url_descarga(fila.object_key, f"manual-{fila.tipo}.pdf")
+    return ManualOut(
+        tipo=fila.tipo, disponible=fila.disponible, idioma=fila.idioma, object_key=fila.object_key, url=url
+    )
+
+
+@router.get("/equipos/{equipo_id}/manuales", response_model=list[ManualOut])
+def listar_manuales(
+    equipo_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _usuario: UsuarioContexto = Depends(requiere_permiso("equipos.leer")),
+) -> list[ManualOut]:
+    return [_manual_a_out(f) for f in _ficha_tecnica_service(db).listar_manuales(equipo_id)]
+
+
+@router.put("/equipos/{equipo_id}/manuales/{tipo}", response_model=ManualOut)
+def guardar_manual(
+    equipo_id: uuid.UUID,
+    tipo: str,
+    datos: ManualRequest,
+    db: Session = Depends(get_db),
+    _usuario: UsuarioContexto = Depends(requiere_permiso("equipos.crear")),
+) -> ManualOut:
+    fila = _ficha_tecnica_service(db).guardar_manual(
+        equipo_id, tipo, datos.disponible, datos.idioma, datos.object_key
+    )
+    db.commit()
+    return _manual_a_out(fila)

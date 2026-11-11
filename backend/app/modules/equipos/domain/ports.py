@@ -57,6 +57,16 @@ class EquipoRepository(Protocol):
         """RF-CFG-05 — bloquea eliminar un área todavía en uso."""
         ...
 
+    def existe_con_proveedor(self, proveedor_id: uuid.UUID) -> bool:
+        """Fase 2 de hojas de vida — bloquea eliminar un proveedor todavía en
+        uso, mismo criterio que `existe_con_categoria`/`existe_con_area`."""
+        ...
+
+    def existe_con_fabricante(self, fabricante_id: uuid.UUID) -> bool:
+        """Fase 2 de hojas de vida — bloquea eliminar un fabricante todavía
+        en uso, mismo criterio que `existe_con_categoria`/`existe_con_area`."""
+        ...
+
     def actualizar(self, equipo: Equipo) -> Equipo: ...
 
     def tiene_calibracion_vencida_bloqueante(self, equipo_id: uuid.UUID) -> bool:
