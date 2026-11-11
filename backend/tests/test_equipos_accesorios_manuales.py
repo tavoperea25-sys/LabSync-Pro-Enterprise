@@ -8,8 +8,12 @@ import uuid
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
+from app.core.database import set_tenant_context
 from app.main import app
+from app.modules.equipos.infrastructure.models import Equipo, EquipoAccesorio
 
 
 @pytest.fixture
@@ -97,6 +101,44 @@ def test_crear_accesorio_con_cantidad_invalida_rechazado(client: TestClient, con
     )
     assert respuesta.status_code == 422
     assert respuesta.json()["error"]["codigo"] == "cantidad_invalida"
+
+
+def test_check_constraint_rechaza_cantidad_invalida_a_nivel_de_base_de_datos(
+    db: Session, crear_laboratorio_con_admin
+):
+    """`FichaTecnicaService._validar_accesorio` ya rechaza esto antes de
+    llegar a la base — este test prueba el `CHECK` de la migración 0020
+    directamente (`cantidad IS NULL OR cantidad > 0`), mismo criterio que
+    tests/test_check_constraints_estados.py: la aplicación no es la única
+    barrera."""
+    laboratorio_id, _, _, _ = crear_laboratorio_con_admin(
+        "Lab Accesorios Check", "lab-acc-check", "admin@lab-acc-check.dev"
+    )
+    set_tenant_context(db, laboratorio_id)
+    equipo_id = uuid.uuid4()
+    db.add(
+        Equipo(
+            id=equipo_id,
+            laboratorio_id=laboratorio_id,
+            codigo_interno="EQ-ACC-CHECK",
+            nombre="Equipo",
+            estado_operativo="operativo",
+        )
+    )
+    db.flush()
+
+    db.add(
+        EquipoAccesorio(
+            id=uuid.uuid4(),
+            laboratorio_id=laboratorio_id,
+            equipo_id=equipo_id,
+            cantidad=0,
+            descripcion="Accesorio con cantidad inválida",
+        )
+    )
+
+    with pytest.raises(IntegrityError, match="ck_equipo_accesorios_cantidad"):
+        db.flush()
 
 
 def test_accesorio_de_otro_equipo_404(client: TestClient, contexto: dict):

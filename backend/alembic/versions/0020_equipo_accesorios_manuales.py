@@ -5,7 +5,11 @@ Crea `equipo_accesorios` (1:N: cantidad, descripción, observaciones — formato
 `LSPC-GMT-GPM-FOR-003.xlsx`, hoja `H.V.`, sección "ACCESORIOS"). `descripcion`
 es la única columna `NOT NULL`: identifica la fila (sin ella no hay accesorio
 que registrar); `cantidad`/`observaciones` quedan opcionales, igual que el
-resto de campos técnicos (docs/24-...md sección 3.8).
+resto de campos técnicos (docs/24-...md sección 3.8). **[Ajuste pedido por
+Gustavo]** `cantidad`, cuando se indica, debe ser un entero mayor a cero —
+reforzado con `CHECK (cantidad IS NULL OR cantidad > 0)`, no solo en el
+servicio (`FichaTecnicaService._validar_accesorio`), mismo criterio que el
+resto de `CHECK` de este desarrollo (la aplicación no es la única barrera).
 
 Crea `equipo_manuales` (1:N, único por `(equipo_id, tipo)`) con los 4 tipos
 reales del formato (`Manual de Operaciones/Instalación/Servicio/Partes`,
@@ -103,6 +107,9 @@ def upgrade() -> None:
         ondelete="RESTRICT",
     )
     op.create_index("ix_equipo_accesorios_equipo", "equipo_accesorios", ["equipo_id"])
+    op.create_check_constraint(
+        "ck_equipo_accesorios_cantidad", "equipo_accesorios", "cantidad IS NULL OR cantidad > 0"
+    )
 
     op.create_table(
         "equipo_manuales",
